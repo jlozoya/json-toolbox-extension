@@ -1,13 +1,15 @@
 {
   "name": "json-toolbox-extension",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "private": true,
   "type": "module",
   "scripts": {
     "dev": "vite --mode development",
     "build": "tsc -p tsconfig.app.json --noEmit && tsc -p tsconfig.node.json --noEmit && vite build",
     "preview": "vite preview",
-    "typecheck": "tsc -p tsconfig.app.json --noEmit && tsc -p tsconfig.node.json --noEmit"
+    "typecheck": "tsc -p tsconfig.app.json --noEmit && tsc -p tsconfig.node.json --noEmit",
+    "zip": "bun scripts/zip-extension.mjs",
+    "release": "bun run build && bun run zip"
   },
   "dependencies": {
     "react": "^19.0.0",
@@ -19,6 +21,7 @@
     "@types/react": "^19.2.14",
     "@types/react-dom": "^19.2.3",
     "@vitejs/plugin-react": "^5.0.0",
+    "archiver": "^7.0.1",
     "typescript": "^5.8.0",
     "vite": "^7.0.0"
   }

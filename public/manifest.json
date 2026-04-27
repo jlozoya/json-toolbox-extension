@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "JSON Toolbox",
-  "description": "Format, validate, inspect, and transform JSON.",
+  "description": "Format, validate, inspect, and transform JSON directly in your browser.",
   "version": "0.1.0",
   "action": {
     "default_title": "JSON Toolbox",
@@ -11,15 +11,17 @@
     "service_worker": "background.js",
     "type": "module"
   },
-  "content_scripts": [
-    {
-      "matches": ["http://*/*", "https://*/*"],
-      "js": ["content.js"],
-      "run_at": "document_end"
-    }
+  "permissions": [
+    "storage",
+    "contextMenus",
+    "tabs",
+    "scripting",
+    "webRequest"
   ],
-  "permissions": ["storage", "contextMenus", "tabs", "scripting", "webRequest"],
-  "host_permissions": ["http://*/*", "https://*/*"],
+  "host_permissions": [
+    "http://*/*",
+    "https://*/*"
+  ],
   "icons": {
     "16": "icons/icon-16.png",
     "48": "icons/icon-48.png",

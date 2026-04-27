@@ -1,4 +1,13 @@
-const STYLES = `
+(() => {
+  const marker = "__JSON_TOOLBOX_CONTENT_SCRIPT_LOADED__"
+
+  if ((globalThis as Record<string, unknown>)[marker]) {
+    return
+  }
+
+  ;(globalThis as Record<string, unknown>)[marker] = true
+
+  const STYLES = `
   *, *::before, *::after { box-sizing: border-box; }
 
   #jtb-root {
@@ -358,567 +367,574 @@ const STYLES = `
   }
 `
 
-type NodeStats = {
-  objects: number
-  arrays: number
-  keys: number
-  primitives: number
-}
-
-function computeStats(
-  value: unknown,
-  acc: NodeStats = { objects: 0, arrays: 0, keys: 0, primitives: 0 },
-): NodeStats {
-  if (Array.isArray(value)) {
-    acc.arrays++
-    value.forEach((item) => computeStats(item, acc))
-  } else if (value !== null && typeof value === "object") {
-    acc.objects++
-
-    const entries = Object.entries(value as Record<string, unknown>)
-
-    acc.keys += entries.length
-    entries.forEach(([, v]) => computeStats(v, acc))
-  } else {
-    acc.primitives++
+  type NodeStats = {
+    objects: number
+    arrays: number
+    keys: number
+    primitives: number
   }
 
-  return acc
-}
+  function computeStats(
+    value: unknown,
+    acc: NodeStats = { objects: 0, arrays: 0, keys: 0, primitives: 0 },
+  ): NodeStats {
+    if (Array.isArray(value)) {
+      acc.arrays++
+      value.forEach((item) => computeStats(item, acc))
+    } else if (value !== null && typeof value === "object") {
+      acc.objects++
 
-function subtreeMatches(name: string | null, value: unknown, q: string): boolean {
-  if (name !== null && name.toLowerCase().includes(q)) {
-    return true
-  }
+      const entries = Object.entries(value as Record<string, unknown>)
 
-  if (Array.isArray(value)) {
-    return value.some((v, i) => subtreeMatches(String(i), v, q))
-  }
-
-  if (value !== null && typeof value === "object") {
-    return Object.entries(value as Record<string, unknown>).some(([k, v]) =>
-      subtreeMatches(k, v, q),
-    )
-  }
-
-  if (typeof value === "string") {
-    return value.toLowerCase().includes(q)
-  }
-
-  if (value !== null && value !== undefined) {
-    return String(value).toLowerCase().includes(q)
-  }
-
-  return false
-}
-
-function highlight(text: string, query: string): HTMLElement | Text {
-  if (!query) {
-    return document.createTextNode(text)
-  }
-
-  const idx = text.toLowerCase().indexOf(query.toLowerCase())
-
-  if (idx === -1) {
-    return document.createTextNode(text)
-  }
-
-  const span = document.createElement("span")
-
-  span.appendChild(document.createTextNode(text.slice(0, idx)))
-
-  const mark = document.createElement("mark")
-  mark.className = "jtb-match"
-  mark.textContent = text.slice(idx, idx + query.length)
-
-  span.appendChild(mark)
-  span.appendChild(document.createTextNode(text.slice(idx + query.length)))
-
-  return span
-}
-
-function reindent(input: string, spaces = 2): string {
-  const text = input.trim()
-
-  if (!text) {
-    return ""
-  }
-
-  let output = ""
-  let depth = 0
-  let inString = false
-  let escaped = false
-
-  const indent = () => " ".repeat(depth * spaces)
-  const endsWithLineIndent = () => /\n[ \t]*$/.test(output)
-
-  for (let i = 0; i < text.length; i++) {
-    const char = text[i]
-
-    if (escaped) {
-      output += char
-      escaped = false
-      continue
-    }
-
-    if (char === "\\" && inString) {
-      output += char
-      escaped = true
-      continue
-    }
-
-    if (char === '"') {
-      output += char
-      inString = !inString
-      continue
-    }
-
-    if (inString) {
-      output += char
-      continue
-    }
-
-    if (char === "{" || char === "[") {
-      if (!endsWithLineIndent()) {
-        output = output.replace(/[ \t]+$/g, "")
-      }
-
-      output += char
-      depth += 1
-      output += `\n${indent()}`
-      continue
-    }
-
-    if (char === "}" || char === "]") {
-      depth = Math.max(0, depth - 1)
-      output = output.trimEnd()
-      output += `\n${indent()}${char}`
-      continue
-    }
-
-    if (char === ",") {
-      output = output.trimEnd()
-      output += `,\n${indent()}`
-      continue
-    }
-
-    if (char === ":") {
-      output = output.trimEnd()
-      output += ": "
-      continue
-    }
-
-    if (/\s/.test(char)) {
-      continue
-    }
-
-    output += char
-  }
-
-  return output.trim()
-}
-
-const nodeRegistry: Array<{
-  open: () => boolean
-  setOpen: (v: boolean) => void
-}> = []
-
-function buildTreeNode(
-  name: string | null,
-  value: unknown,
-  isLast: boolean,
-  path: string,
-  query: string,
-): HTMLElement | null {
-  const q = query.toLowerCase()
-
-  if (q && !subtreeMatches(name, value, q)) {
-    return null
-  }
-
-  const wrapper = document.createElement("div")
-
-  if (path) {
-    wrapper.className = "jtb-node"
-  }
-
-  const isContainer =
-    Array.isArray(value) || (value !== null && typeof value === "object")
-
-  if (isContainer) {
-    const isArray = Array.isArray(value)
-    const entries: Array<[string, unknown]> = isArray
-      ? (value as unknown[]).map((v, i) => [String(i), v])
-      : Object.entries(value as Record<string, unknown>)
-
-    let isOpen = true
-
-    const row = document.createElement("div")
-    row.className = "jtb-row"
-    row.title = path || "root"
-
-    const toggle = document.createElement("button")
-    toggle.className = "jtb-toggle"
-    toggle.textContent = "▼"
-    toggle.setAttribute("aria-label", "toggle")
-
-    const children = document.createElement("div")
-
-    const closeRow = document.createElement("div")
-    closeRow.className = "jtb-row"
-
-    const closeGap = document.createElement("span")
-    closeGap.className = "jtb-toggle-gap"
-    closeRow.appendChild(closeGap)
-
-    const countSpan = document.createElement("span")
-    countSpan.className = "jtb-count"
-    countSpan.textContent = isArray
-      ? ` ${entries.length} items`
-      : ` ${entries.length} keys`
-
-    const closeB = document.createElement("span")
-    closeB.className = "jtb-bracket"
-    closeB.textContent = isArray ? "]" : "}"
-
-    closeRow.appendChild(closeB)
-
-    if (!isLast) {
-      const comma = document.createElement("span")
-      comma.className = "jtb-comma"
-      comma.textContent = ","
-      closeRow.appendChild(comma)
-    }
-
-    const doToggle = (open: boolean) => {
-      isOpen = open
-      toggle.textContent = open ? "▼" : "▶"
-      children.classList.toggle("jtb-hidden", !open)
-      countSpan.classList.toggle("jtb-hidden", open)
-      closeRow.classList.toggle("jtb-hidden", !open)
-    }
-
-    toggle.addEventListener("click", (e) => {
-      e.stopPropagation()
-      doToggle(!isOpen)
-    })
-
-    nodeRegistry.push({
-      open: () => isOpen,
-      setOpen: (v) => doToggle(v),
-    })
-
-    if (name !== null) {
-      const keySpan = document.createElement("span")
-      keySpan.className = "jtb-key"
-      keySpan.appendChild(highlight(`"${name}": `, q))
-      row.appendChild(keySpan)
-    }
-
-    row.appendChild(toggle)
-
-    const openB = document.createElement("span")
-    openB.className = "jtb-bracket"
-    openB.textContent = isArray ? "[" : "{"
-
-    row.appendChild(openB)
-    row.appendChild(countSpan)
-
-    entries.forEach(([k, v], i) => {
-      const childPath = isArray ? `${path}[${k}]` : `${path ? path + "." : ""}${k}`
-
-      const child = buildTreeNode(
-        isArray ? null : k,
-        v,
-        i === entries.length - 1,
-        childPath,
-        query,
-      )
-
-      if (child) {
-        children.appendChild(child)
-      }
-    })
-
-    wrapper.appendChild(row)
-    wrapper.appendChild(children)
-    wrapper.appendChild(closeRow)
-  } else {
-    const row = document.createElement("div")
-    row.className = "jtb-row"
-    row.title = path
-
-    const gap = document.createElement("span")
-    gap.className = "jtb-toggle-gap"
-    row.appendChild(gap)
-
-    if (name !== null) {
-      const keySpan = document.createElement("span")
-      keySpan.className = "jtb-key"
-      keySpan.appendChild(highlight(`"${name}": `, q))
-      row.appendChild(keySpan)
-    }
-
-    const valSpan = document.createElement("span")
-
-    if (value === null) {
-      valSpan.className = "jtb-null"
-      valSpan.textContent = "null"
-    } else if (typeof value === "string") {
-      valSpan.className = "jtb-string"
-      valSpan.appendChild(highlight(JSON.stringify(value), q))
-    } else if (typeof value === "number") {
-      valSpan.className = "jtb-number"
-      valSpan.appendChild(highlight(String(value), q))
-    } else if (typeof value === "boolean") {
-      valSpan.className = "jtb-boolean"
-      valSpan.appendChild(highlight(String(value), q))
+      acc.keys += entries.length
+      entries.forEach(([, v]) => computeStats(v, acc))
     } else {
-      valSpan.textContent = String(value)
+      acc.primitives++
     }
 
-    row.appendChild(valSpan)
+    return acc
+  }
 
-    if (!isLast) {
-      const comma = document.createElement("span")
-      comma.className = "jtb-comma"
-      comma.textContent = ","
-      row.appendChild(comma)
+  function subtreeMatches(
+    name: string | null,
+    value: unknown,
+    q: string,
+  ): boolean {
+    if (name !== null && name.toLowerCase().includes(q)) {
+      return true
     }
 
-    wrapper.appendChild(row)
+    if (Array.isArray(value)) {
+      return value.some((v, i) => subtreeMatches(String(i), v, q))
+    }
+
+    if (value !== null && typeof value === "object") {
+      return Object.entries(value as Record<string, unknown>).some(([k, v]) =>
+        subtreeMatches(k, v, q),
+      )
+    }
+
+    if (typeof value === "string") {
+      return value.toLowerCase().includes(q)
+    }
+
+    if (value !== null && value !== undefined) {
+      return String(value).toLowerCase().includes(q)
+    }
+
+    return false
   }
 
-  return wrapper
-}
+  function highlight(text: string, query: string): HTMLElement | Text {
+    if (!query) {
+      return document.createTextNode(text)
+    }
 
-function renderTree(container: HTMLElement, parsed: unknown, query: string) {
-  nodeRegistry.length = 0
-  container.innerHTML = ""
+    const idx = text.toLowerCase().indexOf(query.toLowerCase())
 
-  const root = buildTreeNode(null, parsed, true, "", query)
+    if (idx === -1) {
+      return document.createTextNode(text)
+    }
 
-  if (root) {
-    container.appendChild(root)
-  } else {
-    const msg = document.createElement("div")
-    msg.className = "jtb-no-results"
-    msg.textContent = `No results for "${query}"`
-    container.appendChild(msg)
-  }
-}
+    const span = document.createElement("span")
 
-function extractJson(): { raw: string; parsed: unknown } | null {
-  const mime = (document.contentType ?? "").toLowerCase()
-  const isJsonMime = mime.includes("json")
-  const pre = document.body.querySelector("pre")
-  const raw = (pre ? pre.textContent : document.body.textContent ?? "").trim()
+    span.appendChild(document.createTextNode(text.slice(0, idx)))
 
-  if (!raw || (raw[0] !== "{" && raw[0] !== "[")) {
-    return null
+    const mark = document.createElement("mark")
+    mark.className = "jtb-match"
+    mark.textContent = text.slice(idx, idx + query.length)
+
+    span.appendChild(mark)
+    span.appendChild(document.createTextNode(text.slice(idx + query.length)))
+
+    return span
   }
 
-  if (!isJsonMime) {
-    const bodyText = (document.body.textContent ?? "").trim()
+  function reindent(input: string, spaces = 2): string {
+    const text = input.trim()
 
-    if (Math.abs(bodyText.length - raw.length) > 5) {
+    if (!text) {
+      return ""
+    }
+
+    let output = ""
+    let depth = 0
+    let inString = false
+    let escaped = false
+
+    const indent = () => " ".repeat(depth * spaces)
+    const endsWithLineIndent = () => /\n[ \t]*$/.test(output)
+
+    for (let i = 0; i < text.length; i++) {
+      const char = text[i]
+
+      if (escaped) {
+        output += char
+        escaped = false
+        continue
+      }
+
+      if (char === "\\" && inString) {
+        output += char
+        escaped = true
+        continue
+      }
+
+      if (char === '"') {
+        output += char
+        inString = !inString
+        continue
+      }
+
+      if (inString) {
+        output += char
+        continue
+      }
+
+      if (char === "{" || char === "[") {
+        if (!endsWithLineIndent()) {
+          output = output.replace(/[ \t]+$/g, "")
+        }
+
+        output += char
+        depth += 1
+        output += `\n${indent()}`
+        continue
+      }
+
+      if (char === "}" || char === "]") {
+        depth = Math.max(0, depth - 1)
+        output = output.trimEnd()
+        output += `\n${indent()}${char}`
+        continue
+      }
+
+      if (char === ",") {
+        output = output.trimEnd()
+        output += `,\n${indent()}`
+        continue
+      }
+
+      if (char === ":") {
+        output = output.trimEnd()
+        output += ": "
+        continue
+      }
+
+      if (/\s/.test(char)) {
+        continue
+      }
+
+      output += char
+    }
+
+    return output.trim()
+  }
+
+  const nodeRegistry: Array<{
+    open: () => boolean
+    setOpen: (v: boolean) => void
+  }> = []
+
+  function buildTreeNode(
+    name: string | null,
+    value: unknown,
+    isLast: boolean,
+    path: string,
+    query: string,
+  ): HTMLElement | null {
+    const q = query.toLowerCase()
+
+    if (q && !subtreeMatches(name, value, q)) {
       return null
     }
 
-    if (document.body.children.length > 1) {
+    const wrapper = document.createElement("div")
+
+    if (path) {
+      wrapper.className = "jtb-node"
+    }
+
+    const isContainer =
+      Array.isArray(value) || (value !== null && typeof value === "object")
+
+    if (isContainer) {
+      const isArray = Array.isArray(value)
+      const entries: Array<[string, unknown]> = isArray
+        ? (value as unknown[]).map((v, i) => [String(i), v])
+        : Object.entries(value as Record<string, unknown>)
+
+      let isOpen = true
+
+      const row = document.createElement("div")
+      row.className = "jtb-row"
+      row.title = path || "root"
+
+      const toggle = document.createElement("button")
+      toggle.className = "jtb-toggle"
+      toggle.textContent = "▼"
+      toggle.setAttribute("aria-label", "toggle")
+
+      const children = document.createElement("div")
+
+      const closeRow = document.createElement("div")
+      closeRow.className = "jtb-row"
+
+      const closeGap = document.createElement("span")
+      closeGap.className = "jtb-toggle-gap"
+      closeRow.appendChild(closeGap)
+
+      const countSpan = document.createElement("span")
+      countSpan.className = "jtb-count"
+      countSpan.textContent = isArray
+        ? ` ${entries.length} items`
+        : ` ${entries.length} keys`
+
+      const closeB = document.createElement("span")
+      closeB.className = "jtb-bracket"
+      closeB.textContent = isArray ? "]" : "}"
+
+      closeRow.appendChild(closeB)
+
+      if (!isLast) {
+        const comma = document.createElement("span")
+        comma.className = "jtb-comma"
+        comma.textContent = ","
+        closeRow.appendChild(comma)
+      }
+
+      const doToggle = (open: boolean) => {
+        isOpen = open
+        toggle.textContent = open ? "▼" : "▶"
+        children.classList.toggle("jtb-hidden", !open)
+        countSpan.classList.toggle("jtb-hidden", open)
+        closeRow.classList.toggle("jtb-hidden", !open)
+      }
+
+      toggle.addEventListener("click", (e) => {
+        e.stopPropagation()
+        doToggle(!isOpen)
+      })
+
+      nodeRegistry.push({
+        open: () => isOpen,
+        setOpen: (v) => doToggle(v),
+      })
+
+      if (name !== null) {
+        const keySpan = document.createElement("span")
+        keySpan.className = "jtb-key"
+        keySpan.appendChild(highlight(`"${name}": `, q))
+        row.appendChild(keySpan)
+      }
+
+      row.appendChild(toggle)
+
+      const openB = document.createElement("span")
+      openB.className = "jtb-bracket"
+      openB.textContent = isArray ? "[" : "{"
+
+      row.appendChild(openB)
+      row.appendChild(countSpan)
+
+      entries.forEach(([k, v], i) => {
+        const childPath = isArray
+          ? `${path}[${k}]`
+          : `${path ? path + "." : ""}${k}`
+
+        const child = buildTreeNode(
+          isArray ? null : k,
+          v,
+          i === entries.length - 1,
+          childPath,
+          query,
+        )
+
+        if (child) {
+          children.appendChild(child)
+        }
+      })
+
+      wrapper.appendChild(row)
+      wrapper.appendChild(children)
+      wrapper.appendChild(closeRow)
+    } else {
+      const row = document.createElement("div")
+      row.className = "jtb-row"
+      row.title = path
+
+      const gap = document.createElement("span")
+      gap.className = "jtb-toggle-gap"
+      row.appendChild(gap)
+
+      if (name !== null) {
+        const keySpan = document.createElement("span")
+        keySpan.className = "jtb-key"
+        keySpan.appendChild(highlight(`"${name}": `, q))
+        row.appendChild(keySpan)
+      }
+
+      const valSpan = document.createElement("span")
+
+      if (value === null) {
+        valSpan.className = "jtb-null"
+        valSpan.textContent = "null"
+      } else if (typeof value === "string") {
+        valSpan.className = "jtb-string"
+        valSpan.appendChild(highlight(JSON.stringify(value), q))
+      } else if (typeof value === "number") {
+        valSpan.className = "jtb-number"
+        valSpan.appendChild(highlight(String(value), q))
+      } else if (typeof value === "boolean") {
+        valSpan.className = "jtb-boolean"
+        valSpan.appendChild(highlight(String(value), q))
+      } else {
+        valSpan.textContent = String(value)
+      }
+
+      row.appendChild(valSpan)
+
+      if (!isLast) {
+        const comma = document.createElement("span")
+        comma.className = "jtb-comma"
+        comma.textContent = ","
+        row.appendChild(comma)
+      }
+
+      wrapper.appendChild(row)
+    }
+
+    return wrapper
+  }
+
+  function renderTree(container: HTMLElement, parsed: unknown, query: string) {
+    nodeRegistry.length = 0
+    container.innerHTML = ""
+
+    const root = buildTreeNode(null, parsed, true, "", query)
+
+    if (root) {
+      container.appendChild(root)
+    } else {
+      const msg = document.createElement("div")
+      msg.className = "jtb-no-results"
+      msg.textContent = `No results for "${query}"`
+      container.appendChild(msg)
+    }
+  }
+
+  function extractJson(): { raw: string; parsed: unknown } | null {
+    const mime = (document.contentType ?? "").toLowerCase()
+    const isJsonMime = mime.includes("json")
+    const pre = document.body.querySelector("pre")
+    const raw = (pre ? pre.textContent : document.body.textContent ?? "").trim()
+
+    if (!raw || (raw[0] !== "{" && raw[0] !== "[")) {
+      return null
+    }
+
+    if (!isJsonMime) {
+      const bodyText = (document.body.textContent ?? "").trim()
+
+      if (Math.abs(bodyText.length - raw.length) > 5) {
+        return null
+      }
+
+      if (document.body.children.length > 1) {
+        return null
+      }
+    }
+
+    try {
+      return { raw, parsed: JSON.parse(raw) }
+    } catch {
       return null
     }
   }
 
-  try {
-    return { raw, parsed: JSON.parse(raw) }
-  } catch {
-    return null
-  }
-}
+  function injectViewer(raw: string, parsed: unknown) {
+    const stats = computeStats(parsed)
+    const bytes = new Blob([raw]).size
 
-function injectViewer(raw: string, parsed: unknown) {
-  const stats = computeStats(parsed)
-  const bytes = new Blob([raw]).size
+    document.title = `JSON — ${location.hostname}`
+    document.body.innerHTML = ""
+    document.body.style.margin = "0"
+    document.body.style.padding = "0"
 
-  document.title = `JSON — ${location.hostname}`
-  document.body.innerHTML = ""
-  document.body.style.margin = "0"
-  document.body.style.padding = "0"
+    const style = document.createElement("style")
+    style.textContent = STYLES
+    document.head.appendChild(style)
 
-  const style = document.createElement("style")
-  style.textContent = STYLES
-  document.head.appendChild(style)
+    const root = document.createElement("div")
+    root.id = "jtb-root"
 
-  const root = document.createElement("div")
-  root.id = "jtb-root"
+    const header = document.createElement("div")
+    header.id = "jtb-header"
 
-  const header = document.createElement("div")
-  header.id = "jtb-header"
+    const title = document.createElement("span")
+    title.id = "jtb-title"
+    title.textContent = "JSON Toolbox"
 
-  const title = document.createElement("span")
-  title.id = "jtb-title"
-  title.textContent = "JSON Toolbox"
+    const actions = document.createElement("div")
+    actions.id = "jtb-actions"
 
-  const actions = document.createElement("div")
-  actions.id = "jtb-actions"
+    const searchInput = document.createElement("input")
+    searchInput.className = "jtb-search"
+    searchInput.type = "search"
+    searchInput.placeholder = "Search keys / values…"
 
-  const searchInput = document.createElement("input")
-  searchInput.className = "jtb-search"
-  searchInput.type = "search"
-  searchInput.placeholder = "Search keys / values…"
+    const expandBtn = document.createElement("button")
+    expandBtn.className = "jtb-btn"
+    expandBtn.textContent = "Expand all"
+    expandBtn.addEventListener("click", () =>
+      nodeRegistry.forEach((n) => n.setOpen(true)),
+    )
 
-  const expandBtn = document.createElement("button")
-  expandBtn.className = "jtb-btn"
-  expandBtn.textContent = "Expand all"
-  expandBtn.addEventListener("click", () =>
-    nodeRegistry.forEach((n) => n.setOpen(true)),
-  )
+    const collapseBtn = document.createElement("button")
+    collapseBtn.className = "jtb-btn"
+    collapseBtn.textContent = "Collapse all"
+    collapseBtn.addEventListener("click", () =>
+      nodeRegistry.forEach((n) => n.setOpen(false)),
+    )
 
-  const collapseBtn = document.createElement("button")
-  collapseBtn.className = "jtb-btn"
-  collapseBtn.textContent = "Collapse all"
-  collapseBtn.addEventListener("click", () =>
-    nodeRegistry.forEach((n) => n.setOpen(false)),
-  )
+    let currentView: "tree" | "raw" = "tree"
 
-  let currentView: "tree" | "raw" = "tree"
+    const treeBtn = document.createElement("button")
+    treeBtn.className = "jtb-btn jtb-btn-active"
+    treeBtn.textContent = "Tree"
 
-  const treeBtn = document.createElement("button")
-  treeBtn.className = "jtb-btn jtb-btn-active"
-  treeBtn.textContent = "Tree"
+    const rawBtn = document.createElement("button")
+    rawBtn.className = "jtb-btn"
+    rawBtn.textContent = "Raw"
 
-  const rawBtn = document.createElement("button")
-  rawBtn.className = "jtb-btn"
-  rawBtn.textContent = "Raw"
+    const copyBtn = document.createElement("button")
+    copyBtn.className = "jtb-btn"
+    copyBtn.textContent = "Copy"
+    copyBtn.addEventListener("click", () => {
+      const text = currentView === "raw" ? raw : JSON.stringify(parsed, null, 2)
 
-  const copyBtn = document.createElement("button")
-  copyBtn.className = "jtb-btn"
-  copyBtn.textContent = "Copy"
-  copyBtn.addEventListener("click", () => {
-    const text = currentView === "raw" ? raw : JSON.stringify(parsed, null, 2)
+      void navigator.clipboard.writeText(text).then(() => {
+        copyBtn.textContent = "Copied!"
 
-    void navigator.clipboard.writeText(text).then(() => {
-      copyBtn.textContent = "Copied!"
-
-      setTimeout(() => {
-        copyBtn.textContent = "Copy"
-      }, 1500)
+        setTimeout(() => {
+          copyBtn.textContent = "Copy"
+        }, 1500)
+      })
     })
-  })
 
-  const openBtn = document.createElement("button")
-  openBtn.className = "jtb-btn jtb-btn-primary"
-  openBtn.textContent = "Open in Editor"
-  openBtn.addEventListener("click", () => {
-    chrome.runtime.sendMessage({ type: "open-editor", json: raw })
-  })
+    const openBtn = document.createElement("button")
+    openBtn.className = "jtb-btn jtb-btn-primary"
+    openBtn.textContent = "Open in Editor"
+    openBtn.addEventListener("click", () => {
+      chrome.runtime.sendMessage({ type: "open-editor", json: raw })
+    })
 
-  actions.append(
-    searchInput,
-    expandBtn,
-    collapseBtn,
-    treeBtn,
-    rawBtn,
-    copyBtn,
-    openBtn,
-  )
+    actions.append(
+      searchInput,
+      expandBtn,
+      collapseBtn,
+      treeBtn,
+      rawBtn,
+      copyBtn,
+      openBtn,
+    )
 
-  header.append(title, actions)
+    header.append(title, actions)
 
-  const statsBar = document.createElement("div")
-  statsBar.id = "jtb-stats"
+    const statsBar = document.createElement("div")
+    statsBar.id = "jtb-stats"
 
-  const sizeLabel =
-    bytes >= 1024 ? `${(bytes / 1024).toFixed(1)} KB` : `${bytes} B`
+    const sizeLabel =
+      bytes >= 1024 ? `${(bytes / 1024).toFixed(1)} KB` : `${bytes} B`
 
-  ;[
-    `Objects: ${stats.objects}`,
-    `Arrays: ${stats.arrays}`,
-    `Keys: ${stats.keys}`,
-    `Primitives: ${stats.primitives}`,
-    sizeLabel,
-  ].forEach((text) => {
-    const s = document.createElement("span")
-    s.className = "jtb-stat"
-    s.textContent = text
-    statsBar.appendChild(s)
-  })
+    ;[
+      `Objects: ${stats.objects}`,
+      `Arrays: ${stats.arrays}`,
+      `Keys: ${stats.keys}`,
+      `Primitives: ${stats.primitives}`,
+      sizeLabel,
+    ].forEach((text) => {
+      const s = document.createElement("span")
+      s.className = "jtb-stat"
+      s.textContent = text
+      statsBar.appendChild(s)
+    })
 
-  const treeContainer = document.createElement("div")
-  treeContainer.id = "jtb-tree"
-  renderTree(treeContainer, parsed, "")
+    const treeContainer = document.createElement("div")
+    treeContainer.id = "jtb-tree"
+    renderTree(treeContainer, parsed, "")
 
-  let searchTimer: ReturnType<typeof setTimeout>
+    let searchTimer: ReturnType<typeof setTimeout>
 
-  searchInput.addEventListener("input", () => {
-    clearTimeout(searchTimer)
+    searchInput.addEventListener("input", () => {
+      clearTimeout(searchTimer)
 
-    searchTimer = setTimeout(() => {
-      renderTree(treeContainer, parsed, searchInput.value)
-    }, 250)
-  })
+      searchTimer = setTimeout(() => {
+        renderTree(treeContainer, parsed, searchInput.value)
+      }, 250)
+    })
 
-  treeContainer.addEventListener("copy", (e) => {
-    const selection = window.getSelection()
+    treeContainer.addEventListener("copy", (e) => {
+      const selection = window.getSelection()
 
-    if (!selection || selection.isCollapsed) {
-      return
+      if (!selection || selection.isCollapsed) {
+        return
+      }
+
+      const cleaned = selection
+        .toString()
+        .replace(/\r\n/g, "\n")
+        .replace(/:\s*\n+\s*/g, ": ")
+        .replace(/\n+\s*,/g, ",")
+        .replace(/\{\s*\n+\s*/g, "{")
+        .replace(/\[\s*\n+\s*/g, "[")
+        .replace(/\n+\s*\}/g, "}")
+        .replace(/\n+\s*\]/g, "]")
+        .replace(/\n{2,}/g, "\n")
+        .trim()
+
+      e.preventDefault()
+      e.clipboardData?.setData("text/plain", reindent(cleaned))
+    })
+
+    const rawContainer = document.createElement("div")
+    rawContainer.id = "jtb-raw"
+    rawContainer.className = "jtb-hidden"
+
+    const rawPre = document.createElement("pre")
+    rawPre.id = "jtb-raw-pre"
+    rawPre.textContent = JSON.stringify(parsed, null, 2)
+
+    rawContainer.appendChild(rawPre)
+
+    function setView(view: "tree" | "raw") {
+      currentView = view
+
+      const isTree = view === "tree"
+
+      treeBtn.className = isTree ? "jtb-btn jtb-btn-active" : "jtb-btn"
+      rawBtn.className = isTree ? "jtb-btn" : "jtb-btn jtb-btn-active"
+
+      treeContainer.classList.toggle("jtb-hidden", !isTree)
+      rawContainer.classList.toggle("jtb-hidden", isTree)
+
+      searchInput.classList.toggle("jtb-hidden", !isTree)
+      expandBtn.classList.toggle("jtb-hidden", !isTree)
+      collapseBtn.classList.toggle("jtb-hidden", !isTree)
     }
 
-    const cleaned = selection
-      .toString()
-      .replace(/\r\n/g, "\n")
-      .replace(/:\s*\n+\s*/g, ": ")
-      .replace(/\n+\s*,/g, ",")
-      .replace(/\{\s*\n+\s*/g, "{")
-      .replace(/\[\s*\n+\s*/g, "[")
-      .replace(/\n+\s*\}/g, "}")
-      .replace(/\n+\s*\]/g, "]")
-      .replace(/\n{2,}/g, "\n")
-      .trim()
+    treeBtn.addEventListener("click", () => setView("tree"))
+    rawBtn.addEventListener("click", () => setView("raw"))
 
-    e.preventDefault()
-    e.clipboardData?.setData("text/plain", reindent(cleaned))
-  })
-
-  const rawContainer = document.createElement("div")
-  rawContainer.id = "jtb-raw"
-  rawContainer.className = "jtb-hidden"
-
-  const rawPre = document.createElement("pre")
-  rawPre.id = "jtb-raw-pre"
-  rawPre.textContent = JSON.stringify(parsed, null, 2)
-
-  rawContainer.appendChild(rawPre)
-
-  function setView(view: "tree" | "raw") {
-    currentView = view
-
-    const isTree = view === "tree"
-
-    treeBtn.className = isTree ? "jtb-btn jtb-btn-active" : "jtb-btn"
-    rawBtn.className = isTree ? "jtb-btn" : "jtb-btn jtb-btn-active"
-
-    treeContainer.classList.toggle("jtb-hidden", !isTree)
-    rawContainer.classList.toggle("jtb-hidden", isTree)
-
-    searchInput.classList.toggle("jtb-hidden", !isTree)
-    expandBtn.classList.toggle("jtb-hidden", !isTree)
-    collapseBtn.classList.toggle("jtb-hidden", !isTree)
+    root.append(header, statsBar, treeContainer, rawContainer)
+    document.body.appendChild(root)
   }
 
-  treeBtn.addEventListener("click", () => setView("tree"))
-  rawBtn.addEventListener("click", () => setView("raw"))
+  if (!document.getElementById("jtb-root")) {
+    const result = extractJson()
 
-  root.append(header, statsBar, treeContainer, rawContainer)
-  document.body.appendChild(root)
-}
-
-if (!document.getElementById("jtb-root")) {
-  const result = extractJson()
-
-  if (result) {
-    injectViewer(result.raw, result.parsed)
+    if (result) {
+      injectViewer(result.raw, result.parsed)
+    }
   }
-}
+})()

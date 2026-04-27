@@ -34,7 +34,12 @@ async function injectJsonViewer(tabId: number) {
   try {
     const [{ result: alreadyInjected }] = await chrome.scripting.executeScript({
       target: { tabId, allFrames: false },
-      func: () => Boolean(document.getElementById("jtb-root")),
+      func: () =>
+        Boolean(
+          document.getElementById("jtb-root") ||
+            (globalThis as Record<string, unknown>)
+              .__JSON_TOOLBOX_CONTENT_SCRIPT_LOADED__,
+        ),
     })
 
     if (alreadyInjected) {
@@ -46,13 +51,17 @@ async function injectJsonViewer(tabId: number) {
       files: ["content.js"],
     })
   } catch {
-    // Ignore restricted tabs, closed tabs, or tabs that navigated away.
+    return
   }
 }
 
 chrome.webRequest.onHeadersReceived.addListener(
   (details): chrome.webRequest.BlockingResponse | undefined => {
-    if (details.frameId !== 0 || details.tabId < 0) {
+    if (
+      details.type !== "main_frame" ||
+      details.frameId !== 0 ||
+      details.tabId < 0
+    ) {
       return undefined
     }
 

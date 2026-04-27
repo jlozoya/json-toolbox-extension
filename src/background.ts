@@ -23,43 +23,56 @@ chrome.contextMenus.onClicked.addListener(async (info) => {
 chrome.runtime.onMessage.addListener((message) => {
   if (message?.type === "open-editor" && typeof message.json === "string") {
     const editorUrl = chrome.runtime.getURL("editor.html")
+
     void chrome.tabs.create({
       url: `${editorUrl}?text=${encodeURIComponent(message.json)}`,
     })
   }
 })
 
-// Chrome does not inject declarative content scripts into application/json pages.
-// We detect JSON responses via webRequest headers and inject content.js manually.
+async function injectJsonViewer(tabId: number) {
+  try {
+    const [{ result: alreadyInjected }] = await chrome.scripting.executeScript({
+      target: { tabId, allFrames: false },
+      func: () => Boolean(document.getElementById("jtb-root")),
+    })
+
+    if (alreadyInjected) {
+      return
+    }
+
+    await chrome.scripting.executeScript({
+      target: { tabId, allFrames: false },
+      files: ["content.js"],
+    })
+  } catch {
+    // Ignore restricted tabs, closed tabs, or tabs that navigated away.
+  }
+}
+
 chrome.webRequest.onHeadersReceived.addListener(
   (details): chrome.webRequest.BlockingResponse | undefined => {
-    if (details.frameId !== 0) return undefined // top-level frame only
+    if (details.frameId !== 0 || details.tabId < 0) {
+      return undefined
+    }
 
-    const ct = details.responseHeaders
-      ?.find((h) => h.name.toLowerCase() === "content-type")
-      ?.value ?? ""
+    const contentType =
+      details.responseHeaders
+        ?.find((header) => header.name.toLowerCase() === "content-type")
+        ?.value?.toLowerCase() ?? ""
 
-    if (!ct.toLowerCase().includes("json")) return undefined
+    if (!contentType.includes("json")) {
+      return undefined
+    }
 
-    // Wait for the document to be ready, then inject
-    chrome.tabs.get(details.tabId, () => {
-      if (chrome.runtime.lastError) return
+    setTimeout(() => {
+      void injectJsonViewer(details.tabId)
+    }, 50)
 
-      const inject = () => {
-        void chrome.scripting
-          .executeScript({
-            target: { tabId: details.tabId, allFrames: false },
-            files: ["content.js"],
-          })
-          .catch(() => {
-            // Ignore: tab may have navigated away or be a restricted page
-          })
-      }
-
-      // Give the browser time to create the document
-      setTimeout(inject, 50)
-    })
+    return undefined
   },
-  { urls: ["http://*/*", "https://*/*"] },
+  {
+    urls: ["http://*/*", "https://*/*"],
+  },
   ["responseHeaders"],
 )

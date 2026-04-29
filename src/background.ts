@@ -1,13 +1,25 @@
-chrome.runtime.onInstalled.addListener(() => {
-  chrome.contextMenus.create({
-    id: "open-json-toolbox",
-    title: "Open JSON Toolbox",
-    contexts: ["selection", "page"],
+const openJsonToolboxMenuId = "open-json-toolbox"
+
+function createContextMenus() {
+  chrome.contextMenus.removeAll(() => {
+    chrome.contextMenus.create({
+      id: openJsonToolboxMenuId,
+      title: "Open JSON Toolbox",
+      contexts: ["selection", "page"],
+    })
   })
+}
+
+chrome.runtime.onInstalled.addListener(() => {
+  createContextMenus()
+})
+
+chrome.runtime.onStartup.addListener(() => {
+  createContextMenus()
 })
 
 chrome.contextMenus.onClicked.addListener(async (info) => {
-  if (info.menuItemId !== "open-json-toolbox") {
+  if (info.menuItemId !== openJsonToolboxMenuId) {
     return
   }
 

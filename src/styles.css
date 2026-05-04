@@ -16,6 +16,31 @@
   box-sizing: border-box;
 }
 
+html.popup-document,
+html.popup-document body,
+html.popup-document #root {
+  width: 420px;
+  min-width: 420px;
+  max-width: 420px;
+  min-height: 540px;
+  margin: 0;
+  padding: 0;
+  overflow-x: hidden;
+  background: #f5f7fb;
+}
+
+html.popup-document body {
+  display: block;
+}
+
+html.popup-document .popup-shell {
+  width: 420px;
+  min-width: 420px;
+  max-width: 420px;
+  min-height: 540px;
+  overflow-x: hidden;
+}
+
 body {
   margin: 0;
   min-width: 320px;
@@ -43,9 +68,12 @@ button {
 
 .popup-shell {
   width: 420px;
+  min-width: 420px;
+  max-width: 420px;
   min-height: 540px;
   padding: 16px;
   background: #f5f7fb;
+  overflow-x: hidden;
 }
 
 .header {
@@ -739,9 +767,24 @@ button {
     grid-template-columns: minmax(0, 1fr);
   }
 
-  .popup-shell {
-    width: 100vw;
-    min-height: 100vh;
+  html.popup-document,
+  html.popup-document body,
+  html.popup-document #root,
+  html.popup-document .popup-shell {
+    width: 420px;
+    min-width: 420px;
+    max-width: 420px;
+  }
+
+  html.popup-document .popup-shell {
+    min-height: 540px;
+  }
+
+  body:not(.popup-body) .popup-shell {
+    width: 420px;
+    min-width: 420px;
+    max-width: 420px;
+    min-height: 540px;
   }
 }
 
@@ -751,6 +794,13 @@ button {
   .popup-shell {
     background: #0f172a;
     color: #e5e7eb;
+  }
+
+  html.popup-document,
+  html.popup-document body,
+  html.popup-document #root,
+  html.popup-document .popup-shell {
+    background: #0f172a;
   }
 
   .sticky-actions {

@@ -71,6 +71,9 @@ playwright-report/
 *.pem
 *.zip
 
+# Firefox extension packaged artifacts
+web-ext-artifacts/
+
 # Temporary files
 tmp/
 temp/

@@ -12,7 +12,10 @@
     "release": "bun run build && bun run zip",
     "format": "prettier . --write",
     "format:check": "prettier . --check",
-    "prepare": "husky"
+    "prepare": "husky",
+    "build:firefox": "bun run build && bun scripts/prepare-firefox-manifest.mjs",
+    "dev:firefox": "bun run build:firefox && web-ext run --source-dir dist",
+    "zip:firefox": "bun run build:firefox && web-ext build --source-dir dist --artifacts-dir web-ext-artifacts --overwrite-dest"
   },
   "lint-staged": {
     "*.{ts,tsx,js,jsx,json,css,html,md}": "prettier --write"
@@ -32,6 +35,7 @@
     "lint-staged": "^16.4.0",
     "prettier": "^3.8.3",
     "typescript": "^5.8.0",
-    "vite": "^7.0.0"
+    "vite": "^7.0.0",
+    "web-ext": "^8.10.0"
   }
 }

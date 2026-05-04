@@ -45,9 +45,7 @@ export function PopupApp() {
       return
     }
 
-    const url = chrome.runtime.getURL(
-      `editor.html?text=${encodeURIComponent(input)}`,
-    )
+    const url = chrome.runtime.getURL(`editor.html?text=${encodeURIComponent(input)}`)
 
     await chrome.tabs.create({ url })
   }

@@ -27,7 +27,10 @@ export function formatJson(input: string, spaces = 2): JsonFormatResult {
   } catch (err) {
     return {
       ok: false,
-      error: buildErrorMessage(input, err instanceof Error ? err : new Error(String(err))),
+      error: buildErrorMessage(
+        input,
+        err instanceof Error ? err : new Error(String(err)),
+      ),
     }
   }
 }

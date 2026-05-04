@@ -43,9 +43,7 @@ export function Tabs({ value, onChange }: TabsProps) {
       {tabs.map((tab) => (
         <button
           key={tab.value}
-          className={
-            value === tab.value ? "tab-button tab-button-active" : "tab-button"
-          }
+          className={value === tab.value ? "tab-button tab-button-active" : "tab-button"}
           type="button"
           role="tab"
           aria-selected={value === tab.value}

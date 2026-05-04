@@ -4,9 +4,7 @@ export function extractJsonPaths(value: unknown, basePath = ""): string[] {
       return basePath ? [`${basePath}[]`] : ["[]"]
     }
 
-    return value.flatMap((item, index) =>
-      extractJsonPaths(item, `${basePath}[${index}]`),
-    )
+    return value.flatMap((item, index) => extractJsonPaths(item, `${basePath}[${index}]`))
   }
 
   if (value !== null && typeof value === "object") {
@@ -17,9 +15,7 @@ export function extractJsonPaths(value: unknown, basePath = ""): string[] {
     }
 
     return entries.flatMap(([key, childValue]) => {
-      const safeKey = /^[a-zA-Z_$][a-zA-Z0-9_$]*$/.test(key)
-        ? key
-        : JSON.stringify(key)
+      const safeKey = /^[a-zA-Z_$][a-zA-Z0-9_$]*$/.test(key) ? key : JSON.stringify(key)
 
       const nextPath = basePath
         ? safeKey.startsWith('"')

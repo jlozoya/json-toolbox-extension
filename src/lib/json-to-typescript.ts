@@ -24,8 +24,11 @@ function inferType(value: unknown, typeName: string, declarations: string[]): st
       return "unknown[]"
     }
 
-    const childTypes = unique(value.map((item) => inferType(item, typeName, declarations)))
-    const arrayType = childTypes.length === 1 ? childTypes[0] : `(${childTypes.join(" | ")})`
+    const childTypes = unique(
+      value.map((item) => inferType(item, typeName, declarations)),
+    )
+    const arrayType =
+      childTypes.length === 1 ? childTypes[0] : `(${childTypes.join(" | ")})`
 
     return `${arrayType}[]`
   }
@@ -76,9 +79,7 @@ function isValidIdentifier(value: string) {
 }
 
 function sanitizeTypeName(value: string) {
-  const cleaned = value
-    .replace(/[^a-zA-Z0-9_$]/g, "_")
-    .replace(/^[^a-zA-Z_$]+/, "")
+  const cleaned = value.replace(/[^a-zA-Z0-9_$]/g, "_").replace(/^[^a-zA-Z_$]+/, "")
 
   if (!cleaned) {
     return "GeneratedType"

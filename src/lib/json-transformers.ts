@@ -101,7 +101,9 @@ export function transformRawText(kind: JsonTransformKind, rawInput: string): str
 }
 
 export function transformRequiresJson(kind: JsonTransformKind) {
-  return JSON_TRANSFORM_OPTIONS.find((option) => option.value === kind)?.requiresJson ?? true
+  return (
+    JSON_TRANSFORM_OPTIONS.find((option) => option.value === kind)?.requiresJson ?? true
+  )
 }
 
 function jsonToXml(value: unknown, rootName = "root", spaces = 2): string {
@@ -140,7 +142,8 @@ function xmlNode(name: string, value: unknown, depth: number, spaces: number): s
     const children = entries
       .map(([key, childValue]) => {
         const safeKey = sanitizeXmlName(key)
-        const keyAttribute = safeKey === key ? "" : ` originalKey="${escapeXmlAttribute(key)}"`
+        const keyAttribute =
+          safeKey === key ? "" : ` originalKey="${escapeXmlAttribute(key)}"`
 
         return xmlNodeWithAttributes(safeKey, keyAttribute, childValue, depth + 1, spaces)
       })
@@ -171,7 +174,9 @@ function xmlNodeWithAttributes(
       return `${indent}<${tag}${attributes} />`
     }
 
-    const children = value.map((item) => xmlNode("item", item, depth + 1, spaces)).join("\n")
+    const children = value
+      .map((item) => xmlNode("item", item, depth + 1, spaces))
+      .join("\n")
     return `${indent}<${tag}${attributes}>\n${children}\n${indent}</${tag}>`
   }
 
@@ -185,7 +190,8 @@ function xmlNodeWithAttributes(
     const children = entries
       .map(([key, childValue]) => {
         const safeKey = sanitizeXmlName(key)
-        const keyAttribute = safeKey === key ? "" : ` originalKey="${escapeXmlAttribute(key)}"`
+        const keyAttribute =
+          safeKey === key ? "" : ` originalKey="${escapeXmlAttribute(key)}"`
 
         return xmlNodeWithAttributes(safeKey, keyAttribute, childValue, depth + 1, spaces)
       })
@@ -345,10 +351,7 @@ function escapeCsvCell(value: string) {
 }
 
 function escapeXmlText(value: string) {
-  return value
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;")
+  return value.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;")
 }
 
 function escapeXmlAttribute(value: string) {

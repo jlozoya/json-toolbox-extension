@@ -1,4 +1,4 @@
-(() => {
+;(() => {
   const marker = "__JSON_TOOLBOX_CONTENT_SCRIPT_LOADED__"
 
   if ((globalThis as Record<string, unknown>)[marker]) {
@@ -442,11 +442,7 @@
     return acc
   }
 
-  function subtreeMatches(
-    name: string | null,
-    value: unknown,
-    q: string,
-  ): boolean {
+  function subtreeMatches(name: string | null, value: unknown, q: string): boolean {
     if (name !== null && name.toLowerCase().includes(q)) {
       return true
     }
@@ -752,9 +748,7 @@
       row.appendChild(countSpan)
 
       entries.forEach(([k, v], i) => {
-        const childPath = isArray
-          ? `${path}[${k}]`
-          : `${path ? `${path}.` : ""}${k}`
+        const childPath = isArray ? `${path}[${k}]` : `${path ? `${path}.` : ""}${k}`
 
         const child = buildTreeNode(
           isArray ? null : k,
@@ -840,7 +834,7 @@
     const mime = (document.contentType ?? "").toLowerCase()
     const isJsonMime = mime.includes("json")
     const pre = document.body.querySelector("pre")
-    const raw = (pre ? pre.textContent : document.body.textContent ?? "").trim()
+    const raw = (pre ? pre.textContent : (document.body.textContent ?? "")).trim()
 
     if (!raw || (raw[0] !== "{" && raw[0] !== "[")) {
       return null
@@ -942,23 +936,14 @@
       chrome.runtime.sendMessage({ type: "open-editor", json: raw })
     })
 
-    actions.append(
-      searchInput,
-      expandBtn,
-      collapseBtn,
-      treeBtn,
-      rawBtn,
-      copyBtn,
-      openBtn,
-    )
+    actions.append(searchInput, expandBtn, collapseBtn, treeBtn, rawBtn, copyBtn, openBtn)
 
     header.append(title, actions)
 
     const statsBar = document.createElement("div")
     statsBar.id = "jtb-stats"
 
-    const sizeLabel =
-      bytes >= 1024 ? `${(bytes / 1024).toFixed(1)} KB` : `${bytes} B`
+    const sizeLabel = bytes >= 1024 ? `${(bytes / 1024).toFixed(1)} KB` : `${bytes} B`
 
     ;[
       `Objects: ${stats.objects}`,

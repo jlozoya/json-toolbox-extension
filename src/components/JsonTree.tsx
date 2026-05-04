@@ -307,16 +307,15 @@ function TreeNode({
 
           {name !== null && (
             <span className="tree-key">
-              "<Highlight text={name} query={searchQuery} />":&nbsp;
+              "<Highlight text={name} query={searchQuery} />
+              ":&nbsp;
             </span>
           )}
 
           <span className="tree-bracket">[</span>
 
           {!open && (
-            <span className="tree-count tree-copy-ignore">
-              {value.length} items
-            </span>
+            <span className="tree-count tree-copy-ignore">{value.length} items</span>
           )}
         </TreeRowWithTooltip>
 
@@ -359,16 +358,15 @@ function TreeNode({
 
           {name !== null && (
             <span className="tree-key">
-              "<Highlight text={name} query={searchQuery} />":&nbsp;
+              "<Highlight text={name} query={searchQuery} />
+              ":&nbsp;
             </span>
           )}
 
           <span className="tree-bracket">{"{"}</span>
 
           {!open && (
-            <span className="tree-count tree-copy-ignore">
-              {entries.length} keys
-            </span>
+            <span className="tree-count tree-copy-ignore">{entries.length} keys</span>
           )}
         </TreeRowWithTooltip>
 
@@ -401,7 +399,8 @@ function TreeNode({
 
         {name !== null && (
           <span className="tree-key">
-            "<Highlight text={name} query={searchQuery} />":&nbsp;
+            "<Highlight text={name} query={searchQuery} />
+            ":&nbsp;
           </span>
         )}
 
@@ -440,13 +439,7 @@ function TreeRowWithTooltip({
   )
 }
 
-function PrimitiveValue({
-  value,
-  searchQuery,
-}: {
-  value: unknown
-  searchQuery: string
-}) {
+function PrimitiveValue({ value, searchQuery }: { value: unknown; searchQuery: string }) {
   if (value === null) {
     return <span className="tree-value-null">null</span>
   }

@@ -60,13 +60,13 @@ It detects raw JSON pages, replaces them with a readable interactive tree view, 
 ├── vite.config.ts
 ├── LICENSE
 └── README.md
-````
+```
 
 ## Requirements
 
-* Node.js 18 or newer
-* npm, pnpm, yarn, or Bun
-* Google Chrome or another Chromium-based browser
+- Node.js 18 or newer
+- npm, pnpm, yarn, or Bun
+- Google Chrome or another Chromium-based browser
 
 ## Installation
 
@@ -140,12 +140,12 @@ When opening a raw JSON response, JSON Toolbox replaces the default browser JSON
 
 Available actions:
 
-* Search keys and values
-* Expand all nodes
-* Collapse all nodes
-* Switch between tree and raw views
-* Copy formatted JSON
-* Open JSON in the full editor
+- Search keys and values
+- Expand all nodes
+- Collapse all nodes
+- Switch between tree and raw views
+- Copy formatted JSON
+- Open JSON in the full editor
 
 ### Popup
 
@@ -153,22 +153,22 @@ Click the extension icon to open the popup.
 
 The popup supports:
 
-* Format JSON
-* Minify JSON
-* Copy JSON
-* Open the full editor
+- Format JSON
+- Minify JSON
+- Copy JSON
+- Open the full editor
 
 ### Full Editor
 
 The full editor supports:
 
-* Formatting JSON
-* Minifying JSON
-* Sorting object keys
-* Viewing JSON as a tree
-* Extracting JSON paths
-* Generating TypeScript types
-* Saving recent JSON entries in local history
+- Formatting JSON
+- Minifying JSON
+- Sorting object keys
+- Viewing JSON as a tree
+- Extracting JSON paths
+- Generating TypeScript types
+- Saving recent JSON entries in local history
 
 ## Scripts
 
@@ -186,11 +186,11 @@ Depending on your package manager, replace `npm run` with `bun run`, `pnpm`, or 
 
 The extension uses Chrome extension APIs for:
 
-* Opening the editor page
-* Reading and writing local extension storage
-* Adding a context menu entry
-* Detecting JSON responses
-* Injecting the JSON content viewer into raw JSON pages
+- Opening the editor page
+- Reading and writing local extension storage
+- Adding a context menu entry
+- Detecting JSON responses
+- Injecting the JSON content viewer into raw JSON pages
 
 Review `public/manifest.json` before publishing to confirm that every permission is required.
 

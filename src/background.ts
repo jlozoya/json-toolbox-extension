@@ -49,8 +49,7 @@ async function injectJsonViewer(tabId: number) {
       func: () =>
         Boolean(
           document.getElementById("jtb-root") ||
-            (globalThis as Record<string, unknown>)
-              .__JSON_TOOLBOX_CONTENT_SCRIPT_LOADED__,
+          (globalThis as Record<string, unknown>).__JSON_TOOLBOX_CONTENT_SCRIPT_LOADED__,
         ),
     })
 
@@ -69,11 +68,7 @@ async function injectJsonViewer(tabId: number) {
 
 chrome.webRequest.onHeadersReceived.addListener(
   (details): chrome.webRequest.BlockingResponse | undefined => {
-    if (
-      details.type !== "main_frame" ||
-      details.frameId !== 0 ||
-      details.tabId < 0
-    ) {
+    if (details.type !== "main_frame" || details.frameId !== 0 || details.tabId < 0) {
       return undefined
     }
 

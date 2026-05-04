@@ -1,4 +1,11 @@
-import { useCallback, useId, useState, type ChangeEvent, type ReactNode } from "react"
+import {
+  useCallback,
+  useId,
+  useState,
+  type ChangeEvent,
+  type ClipboardEvent,
+  type ReactNode,
+} from "react"
 
 type JsonTreeProps = {
   value: unknown
@@ -22,6 +29,31 @@ export function JsonTree({ value }: JsonTreeProps) {
   const hasResults =
     !searchQuery || subtreeMatches(null, value, searchQuery.toLowerCase())
 
+  function handleTreeCopy(event: ClipboardEvent<HTMLDivElement>) {
+    const selection = window.getSelection()
+
+    if (!selection || selection.isCollapsed || selection.rangeCount === 0) {
+      return
+    }
+
+    const container = document.createElement("div")
+
+    for (let index = 0; index < selection.rangeCount; index += 1) {
+      container.appendChild(selection.getRangeAt(index).cloneContents())
+    }
+
+    removeCopyIgnoredNodes(container)
+
+    const cleaned = cleanTreeCopiedText(container.textContent ?? "")
+
+    if (!cleaned) {
+      return
+    }
+
+    event.preventDefault()
+    event.clipboardData.setData("text/plain", cleaned)
+  }
+
   return (
     <div>
       <div className="tree-controls">
@@ -44,7 +76,7 @@ export function JsonTree({ value }: JsonTreeProps) {
         </button>
       </div>
 
-      <div className="output-box">
+      <div className="output-box" onCopy={handleTreeCopy}>
         {hasResults ? (
           <TreeNode
             key={treeKey}
@@ -61,6 +93,127 @@ export function JsonTree({ value }: JsonTreeProps) {
       </div>
     </div>
   )
+}
+
+function removeCopyIgnoredNodes(container: HTMLElement) {
+  container
+    .querySelectorAll(
+      [
+        ".tree-tooltip",
+        ".tree-toggle",
+        ".tree-toggle-gap",
+        ".tree-count",
+        ".tree-copy-ignore",
+      ].join(","),
+    )
+    .forEach((node) => node.remove())
+}
+
+function cleanTreeCopiedText(value: string) {
+  const cleaned = value
+    .replace(/\r\n/g, "\n")
+    .replace(/\u00a0/g, " ")
+    .replace(/[ \t]+/g, " ")
+    .replace(/[ \t]*\n[ \t]*/g, "\n")
+    .replace(/"\s*:\s*\n+\s*/g, '": ')
+    .replace(/:\s*\n+\s*/g, ": ")
+    .replace(/\{\s*\n+\s*/g, "{\n")
+    .replace(/\[\s*\n+\s*/g, "[\n")
+    .replace(/\n+\s*,/g, ",")
+    .replace(/,\s*\n+\s*/g, ",\n")
+    .replace(/\n+\s*\}/g, "\n}")
+    .replace(/\n+\s*\]/g, "\n]")
+    .replace(/\}\s*,\s*\{/g, "},\n{")
+    .replace(/\}\s*,\s*$/g, "},")
+    .replace(/\n{2,}/g, "\n")
+    .trim()
+
+  return reindent(cleaned)
+}
+
+function reindent(input: string, spaces = 2): string {
+  const text = input.trim()
+
+  if (!text) {
+    return ""
+  }
+
+  let output = ""
+  let depth = 0
+  let inString = false
+  let escaped = false
+
+  const indent = () => " ".repeat(depth * spaces)
+  const endsWithLineIndent = () => /\n[ \t]*$/.test(output)
+
+  for (let index = 0; index < text.length; index += 1) {
+    const char = text[index]
+
+    if (escaped) {
+      output += char
+      escaped = false
+      continue
+    }
+
+    if (char === "\\" && inString) {
+      output += char
+      escaped = true
+      continue
+    }
+
+    if (char === '"') {
+      output += char
+      inString = !inString
+      continue
+    }
+
+    if (inString) {
+      output += char
+      continue
+    }
+
+    if (char === "{" || char === "[") {
+      if (!endsWithLineIndent()) {
+        output = output.replace(/[ \t]+$/g, "")
+      }
+
+      output += char
+      depth += 1
+      output += `\n${indent()}`
+      continue
+    }
+
+    if (char === "}" || char === "]") {
+      depth = Math.max(0, depth - 1)
+      output = output.trimEnd()
+      output += `\n${indent()}${char}`
+      continue
+    }
+
+    if (char === ",") {
+      output = output.trimEnd()
+      output += `,\n${indent()}`
+      continue
+    }
+
+    if (char === ":") {
+      output = output.trimEnd()
+      output += ": "
+      continue
+    }
+
+    if (/\s/.test(char)) {
+      if (!endsWithLineIndent() && output && !output.endsWith(" ")) {
+        output += " "
+      }
+
+      continue
+    }
+
+    output += char
+  }
+
+  return output.trim()
 }
 
 function subtreeMatches(name: string | null, value: unknown, q: string): boolean {
@@ -144,7 +297,7 @@ function TreeNode({
       <div className="tree-node">
         <TreeRowWithTooltip nodePath={nodePath}>
           <button
-            className="tree-toggle"
+            className="tree-toggle tree-copy-ignore"
             type="button"
             aria-label={open ? `Collapse ${nodePath}` : `Expand ${nodePath}`}
             onClick={() => setOpen((current) => !current)}
@@ -160,7 +313,11 @@ function TreeNode({
 
           <span className="tree-bracket">[</span>
 
-          {!open && <span className="tree-count">{value.length} items</span>}
+          {!open && (
+            <span className="tree-count tree-copy-ignore">
+              {value.length} items
+            </span>
+          )}
         </TreeRowWithTooltip>
 
         {open &&
@@ -177,6 +334,7 @@ function TreeNode({
           ))}
 
         <div className="tree-row">
+          <span className="tree-toggle-gap tree-copy-ignore" />
           <span className="tree-bracket">]</span>
           {!isLast && <span className="tree-comma">,</span>}
         </div>
@@ -191,7 +349,7 @@ function TreeNode({
       <div className="tree-node">
         <TreeRowWithTooltip nodePath={nodePath}>
           <button
-            className="tree-toggle"
+            className="tree-toggle tree-copy-ignore"
             type="button"
             aria-label={open ? `Collapse ${nodePath}` : `Expand ${nodePath}`}
             onClick={() => setOpen((current) => !current)}
@@ -207,7 +365,11 @@ function TreeNode({
 
           <span className="tree-bracket">{"{"}</span>
 
-          {!open && <span className="tree-count">{entries.length} keys</span>}
+          {!open && (
+            <span className="tree-count tree-copy-ignore">
+              {entries.length} keys
+            </span>
+          )}
         </TreeRowWithTooltip>
 
         {open &&
@@ -224,6 +386,7 @@ function TreeNode({
           ))}
 
         <div className="tree-row">
+          <span className="tree-toggle-gap tree-copy-ignore" />
           <span className="tree-bracket">{"}"}</span>
           {!isLast && <span className="tree-comma">,</span>}
         </div>
@@ -234,7 +397,7 @@ function TreeNode({
   return (
     <div className="tree-node">
       <TreeRowWithTooltip nodePath={nodePath}>
-        <span className="tree-toggle-gap" />
+        <span className="tree-toggle-gap tree-copy-ignore" />
 
         {name !== null && (
           <span className="tree-key">
@@ -261,11 +424,16 @@ function TreeRowWithTooltip({
 
   return (
     <div className="tree-row-tooltip">
-      <div className="tree-row" aria-describedby={tooltipId}>
+      <div className="tree-row" aria-describedby={tooltipId} data-tree-path={nodePath}>
         {children}
       </div>
 
-      <div id={tooltipId} className="tree-tooltip" role="tooltip">
+      <div
+        id={tooltipId}
+        className="tree-tooltip tree-copy-ignore"
+        role="tooltip"
+        aria-hidden="true"
+      >
         {nodePath}
       </div>
     </div>

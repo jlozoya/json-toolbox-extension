@@ -144,6 +144,14 @@
 
   .jtb-row:hover { background: rgb(37 99 235 / 6%); }
 
+  .jtb-copy-ignore,
+  .jtb-toggle,
+  .jtb-toggle-gap,
+  .jtb-count,
+  .jtb-tooltip {
+    user-select: none;
+  }
+
   .jtb-tooltip {
     position: absolute;
     left: 4px;
@@ -187,17 +195,13 @@
     flex-shrink: 0;
     font-family: inherit;
     line-height: 1;
-    user-select: none;
   }
 
   .jtb-toggle-gap {
     width: 14px;
     flex-shrink: 0;
     display: inline-block;
-    user-select: none;
   }
-
-  .jtb-count { user-select: none; }
 
   .jtb-key {
     color: #7c3aed;
@@ -565,6 +569,10 @@
       }
 
       if (/\s/.test(char)) {
+        if (!endsWithLineIndent() && output && !output.endsWith(" ")) {
+          output += " "
+        }
+
         continue
       }
 
@@ -572,6 +580,43 @@
     }
 
     return output.trim()
+  }
+
+  function cleanTreeCopiedText(value: string) {
+    const cleaned = value
+      .replace(/\r\n/g, "\n")
+      .replace(/\u00a0/g, " ")
+      .replace(/[ \t]+/g, " ")
+      .replace(/[ \t]*\n[ \t]*/g, "\n")
+      .replace(/"\s*:\s*\n+\s*/g, '": ')
+      .replace(/:\s*\n+\s*/g, ": ")
+      .replace(/\{\s*\n+\s*/g, "{\n")
+      .replace(/\[\s*\n+\s*/g, "[\n")
+      .replace(/\n+\s*,/g, ",")
+      .replace(/,\s*\n+\s*/g, ",\n")
+      .replace(/\n+\s*\}/g, "\n}")
+      .replace(/\n+\s*\]/g, "\n]")
+      .replace(/\}\s*,\s*\{/g, "},\n{")
+      .replace(/\}\s*,\s*$/g, "},")
+      .replace(/\n{2,}/g, "\n")
+      .trim()
+
+    return reindent(cleaned)
+  }
+
+  function removeCopyIgnoredNodes(container: HTMLElement) {
+    container
+      .querySelectorAll(
+        [
+          ".jtb-copy-ignore",
+          ".jtb-tooltip",
+          ".jtb-toggle",
+          ".jtb-toggle-gap",
+          ".jtb-count",
+          ".jtb-hidden",
+        ].join(","),
+      )
+      .forEach((node) => node.remove())
   }
 
   const nodeRegistry: Array<{
@@ -584,6 +629,7 @@
   function createTreeRow(path: string) {
     tooltipCounter += 1
 
+    const normalizedPath = path || "root"
     const tooltipId = `jtb-tooltip-${tooltipCounter}`
 
     const rowWrapper = document.createElement("div")
@@ -592,13 +638,14 @@
     const row = document.createElement("div")
     row.className = "jtb-row"
     row.setAttribute("aria-describedby", tooltipId)
-    row.dataset.treePath = path || "root"
+    row.dataset.treePath = normalizedPath
 
     const tooltip = document.createElement("div")
     tooltip.id = tooltipId
-    tooltip.className = "jtb-tooltip"
+    tooltip.className = "jtb-tooltip jtb-copy-ignore"
     tooltip.setAttribute("role", "tooltip")
-    tooltip.textContent = path || "root"
+    tooltip.setAttribute("aria-hidden", "true")
+    tooltip.textContent = normalizedPath
 
     rowWrapper.append(row, tooltip)
 
@@ -638,7 +685,7 @@
       const { rowWrapper, row } = createTreeRow(path || "root")
 
       const toggle = document.createElement("button")
-      toggle.className = "jtb-toggle"
+      toggle.className = "jtb-toggle jtb-copy-ignore"
       toggle.textContent = "▼"
       toggle.setAttribute("aria-label", "toggle")
 
@@ -648,11 +695,11 @@
       closeRow.className = "jtb-row"
 
       const closeGap = document.createElement("span")
-      closeGap.className = "jtb-toggle-gap"
+      closeGap.className = "jtb-toggle-gap jtb-copy-ignore"
       closeRow.appendChild(closeGap)
 
       const countSpan = document.createElement("span")
-      countSpan.className = "jtb-count"
+      countSpan.className = "jtb-count jtb-copy-ignore"
       countSpan.textContent = isArray
         ? ` ${entries.length} items`
         : ` ${entries.length} keys`
@@ -729,7 +776,7 @@
       const { rowWrapper, row } = createTreeRow(path || "root")
 
       const gap = document.createElement("span")
-      gap.className = "jtb-toggle-gap"
+      gap.className = "jtb-toggle-gap jtb-copy-ignore"
       row.appendChild(gap)
 
       if (name !== null) {
@@ -940,27 +987,29 @@
       }, 250)
     })
 
-    treeContainer.addEventListener("copy", (e) => {
+    treeContainer.addEventListener("copy", (event) => {
       const selection = window.getSelection()
 
-      if (!selection || selection.isCollapsed) {
+      if (!selection || selection.isCollapsed || selection.rangeCount === 0) {
         return
       }
 
-      const cleaned = selection
-        .toString()
-        .replace(/\r\n/g, "\n")
-        .replace(/:\s*\n+\s*/g, ": ")
-        .replace(/\n+\s*,/g, ",")
-        .replace(/\{\s*\n+\s*/g, "{")
-        .replace(/\[\s*\n+\s*/g, "[")
-        .replace(/\n+\s*\}/g, "}")
-        .replace(/\n+\s*\]/g, "]")
-        .replace(/\n{2,}/g, "\n")
-        .trim()
+      const container = document.createElement("div")
 
-      e.preventDefault()
-      e.clipboardData?.setData("text/plain", reindent(cleaned))
+      for (let index = 0; index < selection.rangeCount; index += 1) {
+        container.appendChild(selection.getRangeAt(index).cloneContents())
+      }
+
+      removeCopyIgnoredNodes(container)
+
+      const cleaned = cleanTreeCopiedText(container.textContent ?? "")
+
+      if (!cleaned) {
+        return
+      }
+
+      event.preventDefault()
+      event.clipboardData?.setData("text/plain", cleaned)
     })
 
     const rawContainer = document.createElement("div")

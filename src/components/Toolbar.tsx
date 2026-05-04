@@ -4,6 +4,7 @@ type ToolbarProps = {
   onFormat: () => void
   onMinify: () => void
   onSortKeys: () => void
+  onTransform: () => void
   onCopyOutput: () => void
   onClear: () => void
 }
@@ -14,41 +15,51 @@ export function Toolbar({
   onFormat,
   onMinify,
   onSortKeys,
+  onTransform,
   onCopyOutput,
   onClear,
 }: ToolbarProps) {
   return (
     <div className="toolbar">
-      <button className="button" type="button" onClick={onFormat}>
-        Format
-      </button>
+      <div className="toolbar-group">
+        <button className="button button-primary" type="button" onClick={onFormat}>
+          Format
+        </button>
 
-      <button className="button" type="button" onClick={onSortKeys}>
-        Sort keys
-      </button>
-      
-      <select
-        className="select"
-        value={indentSize}
-        onChange={(event) =>
-          onIndentSizeChange(Number(event.target.value) === 4 ? 4 : 2)
-        }
-      >
-        <option value={2}>2 spaces</option>
-        <option value={4}>4 spaces</option>
-      </select>
+        <button className="button" type="button" onClick={onMinify}>
+          Minify
+        </button>
 
-      <button className="button" type="button" onClick={onMinify}>
-        Minify
-      </button>
+        <button className="button" type="button" onClick={onSortKeys}>
+          Sort keys
+        </button>
+      </div>
 
-      <button className="button" type="button" onClick={onCopyOutput}>
-        Copy output
-      </button>
+      <div className="toolbar-group toolbar-group-secondary">
+        <select
+          className="select toolbar-select"
+          aria-label="Indent size"
+          value={indentSize}
+          onChange={(event) =>
+            onIndentSizeChange(Number(event.target.value) === 4 ? 4 : 2)
+          }
+        >
+          <option value={2}>2 spaces</option>
+          <option value={4}>4 spaces</option>
+        </select>
 
-      <button className="button button-danger" type="button" onClick={onClear}>
-        Clear
-      </button>
+        <button className="button" type="button" onClick={onTransform}>
+          Transform
+        </button>
+
+        <button className="button" type="button" onClick={onCopyOutput}>
+          Copy output
+        </button>
+
+        <button className="button button-danger" type="button" onClick={onClear}>
+          Clear
+        </button>
+      </div>
     </div>
   )
 }

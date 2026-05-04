@@ -1,6 +1,8 @@
+import type { TabValue } from "../components/Tabs"
+
 export type JsonToolboxSettings = {
   indentSize: 2 | 4
-  defaultView: "format" | "tree" | "types" | "paths" | "history"
+  defaultView: TabValue
 }
 
 export type JsonHistoryItem = {
@@ -8,6 +10,11 @@ export type JsonHistoryItem = {
   input: string
   createdAt: string
 }
+
+type StoredJsonToolboxSettings = Partial<{
+  indentSize: unknown
+  defaultView: unknown
+}>
 
 const SETTINGS_KEY = "jsonToolboxSettings"
 const HISTORY_KEY = "jsonToolboxHistory"
@@ -21,6 +28,37 @@ function hasChromeStorage() {
   return typeof chrome !== "undefined" && Boolean(chrome.storage?.local)
 }
 
+function normalizeDefaultView(value: unknown): TabValue {
+  if (
+    value === "format" ||
+    value === "tree" ||
+    value === "transform" ||
+    value === "types" ||
+    value === "paths" ||
+    value === "history"
+  ) {
+    return value
+  }
+
+  return defaultSettings.defaultView
+}
+
+function normalizeIndentSize(value: unknown): 2 | 4 {
+  return value === 4 ? 4 : 2
+}
+
+function normalizeStoredSettings(value: unknown): JsonToolboxSettings {
+  const stored =
+    value !== null && typeof value === "object"
+      ? (value as StoredJsonToolboxSettings)
+      : {}
+
+  return {
+    indentSize: normalizeIndentSize(stored.indentSize),
+    defaultView: normalizeDefaultView(stored.defaultView),
+  }
+}
+
 export async function getSettings(): Promise<JsonToolboxSettings> {
   if (!hasChromeStorage()) {
     return defaultSettings
@@ -30,7 +68,7 @@ export async function getSettings(): Promise<JsonToolboxSettings> {
 
   return {
     ...defaultSettings,
-    ...(result[SETTINGS_KEY] ?? {}),
+    ...normalizeStoredSettings(result[SETTINGS_KEY]),
   }
 }
 
@@ -50,8 +88,13 @@ export async function getHistory(): Promise<JsonHistoryItem[]> {
   }
 
   const result = await chrome.storage.local.get(HISTORY_KEY)
+  const value = result[HISTORY_KEY]
 
-  return Array.isArray(result[HISTORY_KEY]) ? result[HISTORY_KEY] : []
+  if (!Array.isArray(value)) {
+    return []
+  }
+
+  return value.filter(isJsonHistoryItem)
 }
 
 export async function addHistoryItem(input: string) {
@@ -83,4 +126,18 @@ export async function clearHistory() {
   await chrome.storage.local.set({
     [HISTORY_KEY]: [],
   })
+}
+
+function isJsonHistoryItem(value: unknown): value is JsonHistoryItem {
+  if (value === null || typeof value !== "object") {
+    return false
+  }
+
+  const item = value as Partial<JsonHistoryItem>
+
+  return (
+    typeof item.id === "string" &&
+    typeof item.input === "string" &&
+    typeof item.createdAt === "string"
+  )
 }

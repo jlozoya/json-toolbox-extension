@@ -1,4 +1,4 @@
-export type TabValue = "format" | "tree" | "types" | "paths" | "history"
+export type TabValue = "format" | "tree" | "transform" | "types" | "paths" | "history"
 
 type TabItem = {
   value: TabValue
@@ -13,6 +13,10 @@ const tabs: TabItem[] = [
   {
     value: "tree",
     label: "Tree",
+  },
+  {
+    value: "transform",
+    label: "Transform",
   },
   {
     value: "types",
@@ -35,7 +39,7 @@ type TabsProps = {
 
 export function Tabs({ value, onChange }: TabsProps) {
   return (
-    <div className="tabs">
+    <div className="tabs" role="tablist" aria-label="JSON Toolbox sections">
       {tabs.map((tab) => (
         <button
           key={tab.value}
@@ -43,6 +47,8 @@ export function Tabs({ value, onChange }: TabsProps) {
             value === tab.value ? "tab-button tab-button-active" : "tab-button"
           }
           type="button"
+          role="tab"
+          aria-selected={value === tab.value}
           onClick={() => onChange(tab.value)}
         >
           {tab.label}

@@ -124,6 +124,12 @@
     margin-left: 18px;
   }
 
+  .jtb-row-tooltip {
+    position: relative;
+    width: max-content;
+    min-width: 100%;
+  }
+
   .jtb-row {
     display: flex;
     align-items: baseline;
@@ -137,6 +143,37 @@
   }
 
   .jtb-row:hover { background: rgb(37 99 235 / 6%); }
+
+  .jtb-tooltip {
+    position: absolute;
+    left: 4px;
+    bottom: calc(100% + 8px);
+    z-index: 200;
+    max-width: min(420px, calc(100vw - 64px));
+    padding: 6px 8px;
+    border: 1px solid #d1d5db;
+    border-radius: 8px;
+    background: #111827;
+    color: #ffffff;
+    box-shadow: 0 8px 24px rgb(15 23 42 / 20%);
+    font-family: "SFMono-Regular", Consolas, "Liberation Mono", Menlo, monospace;
+    font-size: 12px;
+    line-height: 1.35;
+    white-space: normal;
+    overflow-wrap: anywhere;
+    pointer-events: none;
+    opacity: 0;
+    transform: translateY(4px);
+    transition:
+      opacity 0.16s ease,
+      transform 0.16s ease;
+  }
+
+  .jtb-row-tooltip:hover .jtb-tooltip,
+  .jtb-row-tooltip:focus-within .jtb-tooltip {
+    opacity: 1;
+    transform: translateY(0);
+  }
 
   .jtb-toggle {
     border: 0;
@@ -352,6 +389,12 @@
 
     .jtb-row:hover { background: rgb(37 99 235 / 12%); }
 
+    .jtb-tooltip {
+      background: #020617;
+      border-color: #475569;
+      color: #e5e7eb;
+    }
+
     .jtb-match {
       background: #713f12;
       color: #fef08a;
@@ -536,6 +579,32 @@
     setOpen: (v: boolean) => void
   }> = []
 
+  let tooltipCounter = 0
+
+  function createTreeRow(path: string) {
+    tooltipCounter += 1
+
+    const tooltipId = `jtb-tooltip-${tooltipCounter}`
+
+    const rowWrapper = document.createElement("div")
+    rowWrapper.className = "jtb-row-tooltip"
+
+    const row = document.createElement("div")
+    row.className = "jtb-row"
+    row.setAttribute("aria-describedby", tooltipId)
+    row.dataset.treePath = path || "root"
+
+    const tooltip = document.createElement("div")
+    tooltip.id = tooltipId
+    tooltip.className = "jtb-tooltip"
+    tooltip.setAttribute("role", "tooltip")
+    tooltip.textContent = path || "root"
+
+    rowWrapper.append(row, tooltip)
+
+    return { rowWrapper, row }
+  }
+
   function buildTreeNode(
     name: string | null,
     value: unknown,
@@ -566,9 +635,7 @@
 
       let isOpen = true
 
-      const row = document.createElement("div")
-      row.className = "jtb-row"
-      row.title = path || "root"
+      const { rowWrapper, row } = createTreeRow(path || "root")
 
       const toggle = document.createElement("button")
       toggle.className = "jtb-toggle"
@@ -621,14 +688,14 @@
         setOpen: (v) => doToggle(v),
       })
 
+      row.appendChild(toggle)
+
       if (name !== null) {
         const keySpan = document.createElement("span")
         keySpan.className = "jtb-key"
         keySpan.appendChild(highlight(`"${name}": `, q))
         row.appendChild(keySpan)
       }
-
-      row.appendChild(toggle)
 
       const openB = document.createElement("span")
       openB.className = "jtb-bracket"
@@ -640,7 +707,7 @@
       entries.forEach(([k, v], i) => {
         const childPath = isArray
           ? `${path}[${k}]`
-          : `${path ? path + "." : ""}${k}`
+          : `${path ? `${path}.` : ""}${k}`
 
         const child = buildTreeNode(
           isArray ? null : k,
@@ -655,13 +722,11 @@
         }
       })
 
-      wrapper.appendChild(row)
+      wrapper.appendChild(rowWrapper)
       wrapper.appendChild(children)
       wrapper.appendChild(closeRow)
     } else {
-      const row = document.createElement("div")
-      row.className = "jtb-row"
-      row.title = path
+      const { rowWrapper, row } = createTreeRow(path || "root")
 
       const gap = document.createElement("span")
       gap.className = "jtb-toggle-gap"
@@ -701,7 +766,7 @@
         row.appendChild(comma)
       }
 
-      wrapper.appendChild(row)
+      wrapper.appendChild(rowWrapper)
     }
 
     return wrapper
@@ -709,6 +774,7 @@
 
   function renderTree(container: HTMLElement, parsed: unknown, query: string) {
     nodeRegistry.length = 0
+    tooltipCounter = 0
     container.innerHTML = ""
 
     const root = buildTreeNode(null, parsed, true, "", query)

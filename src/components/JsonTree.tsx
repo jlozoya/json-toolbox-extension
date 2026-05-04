@@ -1,4 +1,4 @@
-import { useState, useCallback } from "react"
+import { useCallback, useId, useState, type ChangeEvent, type ReactNode } from "react"
 
 type JsonTreeProps = {
   value: unknown
@@ -19,7 +19,8 @@ export function JsonTree({ value }: JsonTreeProps) {
     setTreeKey((k) => k + 1)
   }, [])
 
-  const hasResults = !searchQuery || subtreeMatches(null, value, searchQuery.toLowerCase())
+  const hasResults =
+    !searchQuery || subtreeMatches(null, value, searchQuery.toLowerCase())
 
   return (
     <div>
@@ -29,11 +30,15 @@ export function JsonTree({ value }: JsonTreeProps) {
           type="search"
           placeholder="Search keys or values…"
           value={searchQuery}
-          onChange={(e: React.ChangeEvent<HTMLInputElement>) => setSearchQuery(e.target.value)}
+          onChange={(event: ChangeEvent<HTMLInputElement>) =>
+            setSearchQuery(event.target.value)
+          }
         />
+
         <button className="button" type="button" onClick={expandAll}>
           Expand all
         </button>
+
         <button className="button" type="button" onClick={collapseAll}>
           Collapse all
         </button>
@@ -59,26 +64,51 @@ export function JsonTree({ value }: JsonTreeProps) {
 }
 
 function subtreeMatches(name: string | null, value: unknown, q: string): boolean {
-  if (!q) return true
-  if (name !== null && name.toLowerCase().includes(q)) return true
-  if (Array.isArray(value)) return value.some((v, i) => subtreeMatches(String(i), v, q))
-  if (value !== null && typeof value === "object") {
-    return Object.entries(value as Record<string, unknown>).some(([k, v]) => subtreeMatches(k, v, q))
+  if (!q) {
+    return true
   }
-  if (typeof value === "string") return value.toLowerCase().includes(q)
-  if (value !== null && value !== undefined) return String(value).toLowerCase().includes(q)
+
+  if (name !== null && name.toLowerCase().includes(q)) {
+    return true
+  }
+
+  if (Array.isArray(value)) {
+    return value.some((item, index) => subtreeMatches(String(index), item, q))
+  }
+
+  if (value !== null && typeof value === "object") {
+    return Object.entries(value as Record<string, unknown>).some(([key, childValue]) =>
+      subtreeMatches(key, childValue, q),
+    )
+  }
+
+  if (typeof value === "string") {
+    return value.toLowerCase().includes(q)
+  }
+
+  if (value !== null && value !== undefined) {
+    return String(value).toLowerCase().includes(q)
+  }
+
   return false
 }
 
 function Highlight({ text, query }: { text: string; query: string }) {
-  if (!query) return <>{text}</>
-  const idx = text.toLowerCase().indexOf(query.toLowerCase())
-  if (idx === -1) return <>{text}</>
+  if (!query) {
+    return <>{text}</>
+  }
+
+  const index = text.toLowerCase().indexOf(query.toLowerCase())
+
+  if (index === -1) {
+    return <>{text}</>
+  }
+
   return (
     <>
-      {text.slice(0, idx)}
-      <mark className="tree-match">{text.slice(idx, idx + query.length)}</mark>
-      {text.slice(idx + query.length)}
+      {text.slice(0, index)}
+      <mark className="tree-match">{text.slice(index, index + query.length)}</mark>
+      {text.slice(index + query.length)}
     </>
   )
 }
@@ -92,31 +122,46 @@ type TreeNodeProps = {
   searchQuery: string
 }
 
-function TreeNode({ name, value, isLast, path, defaultOpen, searchQuery }: TreeNodeProps) {
+function TreeNode({
+  name,
+  value,
+  isLast,
+  path,
+  defaultOpen,
+  searchQuery,
+}: TreeNodeProps) {
   const [open, setOpen] = useState(defaultOpen)
-  const q = searchQuery.toLowerCase()
+  const query = searchQuery.toLowerCase()
 
-  if (q && !subtreeMatches(name, value, q)) return null
+  if (query && !subtreeMatches(name, value, query)) {
+    return null
+  }
 
   const nodePath = path || "root"
 
   if (Array.isArray(value)) {
     return (
       <div className="tree-node">
-        <div className="tree-row" title={nodePath}>
-          <button className="tree-toggle" type="button" onClick={() => setOpen((v) => !v)}>
+        <TreeRowWithTooltip nodePath={nodePath}>
+          <button
+            className="tree-toggle"
+            type="button"
+            aria-label={open ? `Collapse ${nodePath}` : `Expand ${nodePath}`}
+            onClick={() => setOpen((current) => !current)}
+          >
             {open ? "▼" : "▶"}
           </button>
+
           {name !== null && (
             <span className="tree-key">
               "<Highlight text={name} query={searchQuery} />":&nbsp;
             </span>
           )}
+
           <span className="tree-bracket">[</span>
-          {!open && (
-            <span className="tree-count">{value.length} items</span>
-          )}
-        </div>
+
+          {!open && <span className="tree-count">{value.length} items</span>}
+        </TreeRowWithTooltip>
 
         {open &&
           value.map((item, index) => (
@@ -144,20 +189,26 @@ function TreeNode({ name, value, isLast, path, defaultOpen, searchQuery }: TreeN
 
     return (
       <div className="tree-node">
-        <div className="tree-row" title={nodePath}>
-          <button className="tree-toggle" type="button" onClick={() => setOpen((v) => !v)}>
+        <TreeRowWithTooltip nodePath={nodePath}>
+          <button
+            className="tree-toggle"
+            type="button"
+            aria-label={open ? `Collapse ${nodePath}` : `Expand ${nodePath}`}
+            onClick={() => setOpen((current) => !current)}
+          >
             {open ? "▼" : "▶"}
           </button>
+
           {name !== null && (
             <span className="tree-key">
               "<Highlight text={name} query={searchQuery} />":&nbsp;
             </span>
           )}
+
           <span className="tree-bracket">{"{"}</span>
-          {!open && (
-            <span className="tree-count">{entries.length} keys</span>
-          )}
-        </div>
+
+          {!open && <span className="tree-count">{entries.length} keys</span>}
+        </TreeRowWithTooltip>
 
         {open &&
           entries.map(([key, childValue], index) => (
@@ -166,7 +217,7 @@ function TreeNode({ name, value, isLast, path, defaultOpen, searchQuery }: TreeN
               name={key}
               value={childValue}
               isLast={index === entries.length - 1}
-              path={`${path ? path + "." : ""}${key}`}
+              path={`${path ? `${path}.` : ""}${key}`}
               defaultOpen={defaultOpen}
               searchQuery={searchQuery}
             />
@@ -182,22 +233,55 @@ function TreeNode({ name, value, isLast, path, defaultOpen, searchQuery }: TreeN
 
   return (
     <div className="tree-node">
-      <div className="tree-row" title={nodePath}>
+      <TreeRowWithTooltip nodePath={nodePath}>
         <span className="tree-toggle-gap" />
+
         {name !== null && (
           <span className="tree-key">
             "<Highlight text={name} query={searchQuery} />":&nbsp;
           </span>
         )}
+
         <PrimitiveValue value={value} searchQuery={searchQuery} />
+
         {!isLast && <span className="tree-comma">,</span>}
+      </TreeRowWithTooltip>
+    </div>
+  )
+}
+
+function TreeRowWithTooltip({
+  nodePath,
+  children,
+}: {
+  nodePath: string
+  children: ReactNode
+}) {
+  const tooltipId = useId()
+
+  return (
+    <div className="tree-row-tooltip">
+      <div className="tree-row" aria-describedby={tooltipId}>
+        {children}
+      </div>
+
+      <div id={tooltipId} className="tree-tooltip" role="tooltip">
+        {nodePath}
       </div>
     </div>
   )
 }
 
-function PrimitiveValue({ value, searchQuery }: { value: unknown; searchQuery: string }) {
-  if (value === null) return <span className="tree-value-null">null</span>
+function PrimitiveValue({
+  value,
+  searchQuery,
+}: {
+  value: unknown
+  searchQuery: string
+}) {
+  if (value === null) {
+    return <span className="tree-value-null">null</span>
+  }
 
   if (typeof value === "string") {
     return (

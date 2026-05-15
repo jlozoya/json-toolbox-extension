@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "JSON Toolbox",
-  "version": "0.1.3",
+  "version": "0.1.4",
   "description": "Format, validate, inspect, and transform JSON directly in the browser.",
   "action": {
     "default_title": "JSON Toolbox",

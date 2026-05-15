@@ -1,17 +1,11 @@
-import { access, copyFile } from "node:fs/promises"
-import { constants } from "node:fs"
+import { spawnSync } from "node:child_process"
 import { resolve } from "node:path"
+import process from "node:process"
 
-const distDirectory = resolve("dist")
-const distManifestPath = resolve(distDirectory, "manifest.json")
-const firefoxManifestPath = resolve("public", "manifest.firefox.json")
+const scriptPath = resolve(process.cwd(), "scripts", "prepare-manifest.mjs")
 
-try {
-  await access(distDirectory, constants.F_OK)
-} catch {
-  throw new Error("dist folder not found. Run bun run build before preparing Firefox.")
-}
+const result = spawnSync(process.execPath, [scriptPath, "firefox"], {
+  stdio: "inherit",
+})
 
-await copyFile(firefoxManifestPath, distManifestPath)
-
-console.log("Firefox manifest copied to dist/manifest.json")
+process.exit(result.status ?? 1)

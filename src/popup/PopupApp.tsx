@@ -2,6 +2,7 @@ import { useMemo, useState } from "react"
 import { ErrorPanel } from "../components/ErrorPanel"
 import { copyToClipboard } from "../lib/clipboard"
 import { formatJson } from "../lib/json-format"
+import { storeEditorPayload } from "../lib/storage"
 
 const sampleJson = `{"name":"JSON Toolbox","features":["format","minify","validate"]}`
 
@@ -9,12 +10,19 @@ export function PopupApp() {
   const [input, setInput] = useState(sampleJson)
   const [output, setOutput] = useState("")
   const [error, setError] = useState<string | null>(null)
+  const [statusMessage, setStatusMessage] = useState<string | null>(null)
 
   const canOpenEditor = useMemo(() => {
     return typeof chrome !== "undefined" && Boolean(chrome.tabs)
   }, [])
 
+  function clearStatus() {
+    setStatusMessage(null)
+  }
+
   function handleFormat() {
+    clearStatus()
+
     const result = formatJson(input, 2)
 
     if (!result.ok) {
@@ -28,6 +36,8 @@ export function PopupApp() {
   }
 
   function handleMinify() {
+    clearStatus()
+
     const result = formatJson(input, 2)
 
     if (!result.ok) {
@@ -41,17 +51,35 @@ export function PopupApp() {
   }
 
   async function handleOpenEditor() {
+    clearStatus()
+
     if (!canOpenEditor) {
+      setError("Cannot open the full editor in this browser context.")
       return
     }
 
-    const url = chrome.runtime.getURL(`editor.html?text=${encodeURIComponent(input)}`)
+    const editorUrl = chrome.runtime.getURL("editor.html")
+    const payloadId = await storeEditorPayload(input)
 
-    await chrome.tabs.create({ url })
+    await chrome.tabs.create({
+      url: payloadId
+        ? `${editorUrl}?payloadId=${encodeURIComponent(payloadId)}`
+        : `${editorUrl}?text=${encodeURIComponent(input)}`,
+    })
   }
 
   async function handleCopy() {
-    await copyToClipboard(output || input)
+    clearStatus()
+
+    const result = await copyToClipboard(output || input)
+
+    if (!result.ok) {
+      setError(result.error)
+      return
+    }
+
+    setError(null)
+    setStatusMessage("Copied.")
   }
 
   return (
@@ -80,6 +108,8 @@ export function PopupApp() {
 
       <ErrorPanel error={error} />
 
+      {statusMessage && <div className="success-panel">{statusMessage}</div>}
+
       <div className="card panel">
         <div className="panel-header">
           <span className="panel-title">Input</span>
@@ -89,12 +119,15 @@ export function PopupApp() {
           className="textarea popup-textarea"
           value={input}
           spellCheck={false}
-          onChange={(event) => setInput(event.target.value)}
+          onChange={(event) => {
+            clearStatus()
+            setInput(event.target.value)
+          }}
         />
       </div>
 
       {output && (
-        <div className="card panel" style={{ marginTop: 12 }}>
+        <div className="card panel popup-output-panel">
           <div className="panel-header">
             <span className="panel-title">Output</span>
           </div>

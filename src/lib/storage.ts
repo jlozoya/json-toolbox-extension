@@ -3,6 +3,7 @@ import type { TabValue } from "../components/Tabs"
 export type JsonToolboxSettings = {
   indentSize: 2 | 4
   defaultView: TabValue
+  saveHistory: boolean
 }
 
 export type JsonHistoryItem = {
@@ -14,18 +15,36 @@ export type JsonHistoryItem = {
 type StoredJsonToolboxSettings = Partial<{
   indentSize: unknown
   defaultView: unknown
+  saveHistory: unknown
 }>
+
+type EditorPayloadItem = {
+  id: string
+  text: string
+  createdAt: string
+}
 
 const SETTINGS_KEY = "jsonToolboxSettings"
 const HISTORY_KEY = "jsonToolboxHistory"
+const EDITOR_PAYLOAD_PREFIX = "jsonToolboxEditorPayload:"
+const MAX_HISTORY_ITEMS = 20
 
 const defaultSettings: JsonToolboxSettings = {
   indentSize: 2,
   defaultView: "format",
+  saveHistory: false,
 }
 
 function hasChromeStorage() {
   return typeof chrome !== "undefined" && Boolean(chrome.storage?.local)
+}
+
+function getSessionStorageArea(): chrome.storage.StorageArea | null {
+  if (typeof chrome === "undefined") {
+    return null
+  }
+
+  return chrome.storage?.session ?? chrome.storage?.local ?? null
 }
 
 function normalizeDefaultView(value: unknown): TabValue {
@@ -47,6 +66,10 @@ function normalizeIndentSize(value: unknown): 2 | 4 {
   return value === 4 ? 4 : 2
 }
 
+function normalizeBoolean(value: unknown, fallback: boolean) {
+  return typeof value === "boolean" ? value : fallback
+}
+
 function normalizeStoredSettings(value: unknown): JsonToolboxSettings {
   const stored =
     value !== null && typeof value === "object"
@@ -56,6 +79,7 @@ function normalizeStoredSettings(value: unknown): JsonToolboxSettings {
   return {
     indentSize: normalizeIndentSize(stored.indentSize),
     defaultView: normalizeDefaultView(stored.defaultView),
+    saveHistory: normalizeBoolean(stored.saveHistory, defaultSettings.saveHistory),
   }
 }
 
@@ -97,8 +121,8 @@ export async function getHistory(): Promise<JsonHistoryItem[]> {
   return value.filter(isJsonHistoryItem)
 }
 
-export async function addHistoryItem(input: string) {
-  if (!hasChromeStorage() || !input.trim()) {
+export async function addHistoryItem(input: string, enabled = true) {
+  if (!enabled || !hasChromeStorage() || !input.trim()) {
     return
   }
 
@@ -111,7 +135,7 @@ export async function addHistoryItem(input: string) {
       createdAt: new Date().toISOString(),
     },
     ...currentHistory.filter((item) => item.input !== input),
-  ].slice(0, 20)
+  ].slice(0, MAX_HISTORY_ITEMS)
 
   await chrome.storage.local.set({
     [HISTORY_KEY]: nextHistory,
@@ -128,6 +152,55 @@ export async function clearHistory() {
   })
 }
 
+export async function storeEditorPayload(text: string): Promise<string | null> {
+  const storageArea = getSessionStorageArea()
+
+  if (!storageArea || !text) {
+    return null
+  }
+
+  const id = crypto.randomUUID()
+  const payload: EditorPayloadItem = {
+    id,
+    text,
+    createdAt: new Date().toISOString(),
+  }
+
+  await storageArea.set({
+    [`${EDITOR_PAYLOAD_PREFIX}${id}`]: payload,
+  })
+
+  return id
+}
+
+export async function getEditorPayload(id: string): Promise<string | null> {
+  const storageArea = getSessionStorageArea()
+
+  if (!storageArea || !id) {
+    return null
+  }
+
+  const key = `${EDITOR_PAYLOAD_PREFIX}${id}`
+  const result = await storageArea.get(key)
+  const value = result[key]
+
+  if (!isEditorPayloadItem(value)) {
+    return null
+  }
+
+  return value.text
+}
+
+export async function removeEditorPayload(id: string) {
+  const storageArea = getSessionStorageArea()
+
+  if (!storageArea || !id) {
+    return
+  }
+
+  await storageArea.remove(`${EDITOR_PAYLOAD_PREFIX}${id}`)
+}
+
 function isJsonHistoryItem(value: unknown): value is JsonHistoryItem {
   if (value === null || typeof value !== "object") {
     return false
@@ -138,6 +211,20 @@ function isJsonHistoryItem(value: unknown): value is JsonHistoryItem {
   return (
     typeof item.id === "string" &&
     typeof item.input === "string" &&
+    typeof item.createdAt === "string"
+  )
+}
+
+function isEditorPayloadItem(value: unknown): value is EditorPayloadItem {
+  if (value === null || typeof value !== "object") {
+    return false
+  }
+
+  const item = value as Partial<EditorPayloadItem>
+
+  return (
+    typeof item.id === "string" &&
+    typeof item.text === "string" &&
     typeof item.createdAt === "string"
   )
 }

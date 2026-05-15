@@ -21,7 +21,7 @@ export function Toolbar({
 }: ToolbarProps) {
   return (
     <div className="toolbar">
-      <div className="toolbar-group">
+      <div className="toolbar-group toolbar-group-primary" aria-label="JSON actions">
         <button className="button button-primary" type="button" onClick={onFormat}>
           Format
         </button>
@@ -35,7 +35,7 @@ export function Toolbar({
         </button>
       </div>
 
-      <div className="toolbar-group toolbar-group-secondary">
+      <div className="toolbar-group toolbar-group-secondary" aria-label="Output actions">
         <select
           className="select toolbar-select"
           aria-label="Indent size"

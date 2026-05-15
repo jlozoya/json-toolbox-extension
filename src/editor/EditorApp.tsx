@@ -4,7 +4,7 @@ import { JsonTree } from "../components/JsonTree"
 import { Tabs, type TabValue } from "../components/Tabs"
 import { Toolbar } from "../components/Toolbar"
 import { copyToClipboard } from "../lib/clipboard"
-import { formatJson, sortJsonKeys } from "../lib/json-format"
+import { formatJson, sortJsonKeys, type JsonFormatResult } from "../lib/json-format"
 import { extractJsonPaths } from "../lib/json-paths"
 import { getJsonStats } from "../lib/json-stats"
 import { jsonToTypeScript } from "../lib/json-to-typescript"
@@ -18,12 +18,16 @@ import {
 import {
   addHistoryItem,
   clearHistory,
+  getEditorPayload,
   getHistory,
   getSettings,
+  removeEditorPayload,
   saveSettings,
   type JsonHistoryItem,
   type JsonToolboxSettings,
 } from "../lib/storage"
+
+type SuccessfulJsonFormatResult = Extract<JsonFormatResult, { ok: true }>
 
 const sampleJson = `{
   "userId": 1,
@@ -37,35 +41,74 @@ export function EditorApp() {
   const [output, setOutput] = useState("")
   const [parsedValue, setParsedValue] = useState<unknown | null>(null)
   const [error, setError] = useState<string | null>(null)
+  const [statusMessage, setStatusMessage] = useState<string | null>(null)
   const [activeTab, setActiveTab] = useState<TabValue>("format")
   const [transformKind, setTransformKind] = useState<JsonTransformKind>("xml")
   const [settings, setSettings] = useState<JsonToolboxSettings>({
     indentSize: 2,
     defaultView: "format",
+    saveHistory: false,
   })
   const [history, setHistory] = useState<JsonHistoryItem[]>([])
+  const [clearArmed, setClearArmed] = useState(false)
+  const [clearHistoryArmed, setClearHistoryArmed] = useState(false)
 
   useEffect(() => {
-    const params = new URLSearchParams(window.location.search)
-    const text = params.get("text")
+    async function loadInitialState() {
+      const params = new URLSearchParams(window.location.search)
+      const payloadId = params.get("payloadId")
+      const text = params.get("text")
 
-    if (text) {
-      setInput(text)
-    }
-  }, [])
-
-  useEffect(() => {
-    async function load() {
-      const loadedSettings = await getSettings()
-      const loadedHistory = await getHistory()
+      const [loadedSettings, loadedHistory] = await Promise.all([
+        getSettings(),
+        getHistory(),
+      ])
 
       setSettings(loadedSettings)
       setActiveTab(loadedSettings.defaultView)
       setHistory(loadedHistory)
+
+      if (payloadId) {
+        const payload = await getEditorPayload(payloadId)
+
+        if (payload) {
+          setInput(payload)
+          await removeEditorPayload(payloadId)
+          return
+        }
+      }
+
+      if (text) {
+        setInput(text)
+      }
     }
 
-    void load()
+    void loadInitialState()
   }, [])
+
+  useEffect(() => {
+    if (!clearArmed) {
+      return undefined
+    }
+
+    const timeout = window.setTimeout(() => {
+      setClearArmed(false)
+    }, 2500)
+
+    return () => window.clearTimeout(timeout)
+  }, [clearArmed])
+
+  useEffect(() => {
+    if (!clearHistoryArmed) {
+      return undefined
+    }
+
+    const timeout = window.setTimeout(() => {
+      setClearHistoryArmed(false)
+    }, 2500)
+
+    return () => window.clearTimeout(timeout)
+  }, [clearHistoryArmed])
 
   const stats = useMemo(() => {
     if (!parsedValue) {
@@ -97,11 +140,18 @@ export function EditorApp() {
     (option) => option.value === transformKind,
   )
 
-  function parseCurrentInput() {
+  function clearStatus() {
+    setStatusMessage(null)
+  }
+
+  function parseCurrentInput(showError = true): SuccessfulJsonFormatResult | null {
     const result = formatJson(input, settings.indentSize)
 
     if (!result.ok) {
-      setError(result.error)
+      if (showError) {
+        setError(result.error)
+      }
+
       setParsedValue(null)
       return null
     }
@@ -111,7 +161,18 @@ export function EditorApp() {
     return result
   }
 
+  async function refreshHistory() {
+    setHistory(await getHistory())
+  }
+
+  async function saveHistoryItem(inputValue: string) {
+    await addHistoryItem(inputValue, settings.saveHistory)
+    await refreshHistory()
+  }
+
   async function handleFormat() {
+    clearStatus()
+
     const result = parseCurrentInput()
 
     if (!result) {
@@ -123,11 +184,12 @@ export function EditorApp() {
     setOutput(result.formatted)
     setInput(result.formatted)
 
-    await addHistoryItem(result.formatted)
-    setHistory(await getHistory())
+    await saveHistoryItem(result.formatted)
   }
 
   async function handleMinify() {
+    clearStatus()
+
     const result = parseCurrentInput()
 
     if (!result) {
@@ -139,11 +201,12 @@ export function EditorApp() {
     setOutput(result.minified)
     setInput(result.minified)
 
-    await addHistoryItem(result.minified)
-    setHistory(await getHistory())
+    await saveHistoryItem(result.minified)
   }
 
   async function handleSortKeys() {
+    clearStatus()
+
     const result = parseCurrentInput()
 
     if (!result) {
@@ -159,12 +222,12 @@ export function EditorApp() {
     setOutput(formatted)
     setInput(formatted)
 
-    await addHistoryItem(formatted)
-    setHistory(await getHistory())
+    await saveHistoryItem(formatted)
   }
 
   async function handleTransform() {
     try {
+      clearStatus()
       setActiveTab("transform")
 
       if (!input.trim()) {
@@ -205,8 +268,7 @@ export function EditorApp() {
       setOutput(transformed)
       setError(null)
 
-      await addHistoryItem(result.formatted)
-      setHistory(await getHistory())
+      await saveHistoryItem(result.formatted)
     } catch (err) {
       setOutput("")
       setError(err instanceof Error ? err.message : String(err))
@@ -214,14 +276,33 @@ export function EditorApp() {
   }
 
   async function handleCopyOutput() {
-    await copyToClipboard(getCurrentOutput())
+    clearStatus()
+
+    const result = await copyToClipboard(getCurrentOutput())
+
+    if (!result.ok) {
+      setError(result.error)
+      return
+    }
+
+    setError(null)
+    setStatusMessage("Copied.")
   }
 
   function handleClear() {
+    clearStatus()
+
+    if (!clearArmed && (input || output)) {
+      setClearArmed(true)
+      setStatusMessage("Click Clear again to remove the current input and output.")
+      return
+    }
+
     setInput("")
     setOutput("")
     setParsedValue(null)
     setError(null)
+    setClearArmed(false)
   }
 
   function handleUseOutputAsInput() {
@@ -229,6 +310,7 @@ export function EditorApp() {
       return
     }
 
+    clearStatus()
     setInput(output)
     setOutput("")
     setParsedValue(null)
@@ -244,9 +326,30 @@ export function EditorApp() {
 
     setSettings(nextSettings)
     await saveSettings(nextSettings)
+
+    if (parsedValue) {
+      parseCurrentInput(false)
+    }
+  }
+
+  async function handleSaveHistoryChange(saveHistory: boolean) {
+    const nextSettings = {
+      ...settings,
+      saveHistory,
+    }
+
+    setSettings(nextSettings)
+    await saveSettings(nextSettings)
+
+    setStatusMessage(
+      saveHistory
+        ? "History saving is enabled for future JSON actions."
+        : "History saving is disabled.",
+    )
   }
 
   async function handleTabChange(tab: TabValue) {
+    clearStatus()
     setActiveTab(tab)
 
     const nextSettings = {
@@ -258,16 +361,27 @@ export function EditorApp() {
     await saveSettings(nextSettings)
 
     if (tab !== "history") {
-      parseCurrentInput()
+      parseCurrentInput(tab !== "format")
     }
   }
 
   async function handleClearHistory() {
+    clearStatus()
+
+    if (!clearHistoryArmed && history.length > 0) {
+      setClearHistoryArmed(true)
+      setStatusMessage("Click Clear history again to permanently clear saved history.")
+      return
+    }
+
     await clearHistory()
     setHistory([])
+    setClearHistoryArmed(false)
+    setStatusMessage("History cleared.")
   }
 
   function handleLoadHistoryItem(item: JsonHistoryItem) {
+    clearStatus()
     setInput(item.input)
     setOutput(item.input)
     setActiveTab("format")
@@ -276,6 +390,17 @@ export function EditorApp() {
 
     if (result.ok) {
       setParsedValue(result.value)
+      setError(null)
+    }
+  }
+
+  function handleInputChange(value: string) {
+    clearStatus()
+    setInput(value)
+    setOutput("")
+    setParsedValue(null)
+
+    if (!value.trim()) {
       setError(null)
     }
   }
@@ -316,15 +441,26 @@ export function EditorApp() {
             onClear={handleClear}
           />
 
-          {stats && (
-            <div className="stats">
-              <span className="stat">Objects: {stats.objects}</span>
-              <span className="stat">Arrays: {stats.arrays}</span>
-              <span className="stat">Keys: {stats.keys}</span>
-              <span className="stat">Primitives: {stats.primitives}</span>
-              <span className="stat">Bytes: {stats.bytes}</span>
-            </div>
-          )}
+          <div className="toolbar-meta-row">
+            <label className="checkbox-row">
+              <input
+                type="checkbox"
+                checked={settings.saveHistory}
+                onChange={(event) => handleSaveHistoryChange(event.target.checked)}
+              />
+              <span>Save history</span>
+            </label>
+
+            {stats && (
+              <div className="stats" aria-label="JSON statistics">
+                <span className="stat">Objects: {stats.objects}</span>
+                <span className="stat">Arrays: {stats.arrays}</span>
+                <span className="stat">Keys: {stats.keys}</span>
+                <span className="stat">Primitives: {stats.primitives}</span>
+                <span className="stat">Bytes: {stats.bytes}</span>
+              </div>
+            )}
+          </div>
 
           <Tabs value={activeTab} onChange={handleTabChange} />
         </div>
@@ -332,9 +468,12 @@ export function EditorApp() {
 
       <ErrorPanel error={error} />
 
+      {statusMessage && <div className="success-panel">{statusMessage}</div>}
+
       {activeTab === "history" ? (
         <HistoryPanel
           history={history}
+          saveHistory={settings.saveHistory}
           onLoad={handleLoadHistoryItem}
           onClear={handleClearHistory}
         />
@@ -351,7 +490,7 @@ export function EditorApp() {
               value={input}
               spellCheck={false}
               placeholder="Paste JSON here…"
-              onChange={(event) => setInput(event.target.value)}
+              onChange={(event) => handleInputChange(event.target.value)}
             />
           </section>
 
@@ -361,7 +500,7 @@ export function EditorApp() {
 
               {output && (
                 <button
-                  className="button button-small"
+                  className="button button-small panel-header-action"
                   type="button"
                   onClick={handleUseOutputAsInput}
                 >
@@ -381,7 +520,7 @@ export function EditorApp() {
                 <JsonTree value={parsedValue} />
               ) : (
                 <div className="output-box output-box-empty">
-                  Run Format first or switch tabs again.
+                  Paste valid JSON, then open this tab again or click Format.
                 </div>
               ))}
 
@@ -429,7 +568,8 @@ export function EditorApp() {
 
             {activeTab === "types" && (
               <pre className="output-box">
-                {typescriptOutput || "Run Format first or switch tabs again."}
+                {typescriptOutput ||
+                  "Paste valid JSON, then open this tab again or click Format."}
               </pre>
             )}
 
@@ -437,7 +577,7 @@ export function EditorApp() {
               <pre className="output-box">
                 {paths.length > 0
                   ? paths.join("\n")
-                  : "Run Format first or switch tabs again."}
+                  : "Paste valid JSON, then open this tab again or click Format."}
               </pre>
             )}
           </section>
@@ -449,17 +589,29 @@ export function EditorApp() {
 
 type HistoryPanelProps = {
   history: JsonHistoryItem[]
+  saveHistory: boolean
   onLoad: (item: JsonHistoryItem) => void
   onClear: () => void
 }
 
-function HistoryPanel({ history, onLoad, onClear }: HistoryPanelProps) {
+function HistoryPanel({ history, saveHistory, onLoad, onClear }: HistoryPanelProps) {
   return (
     <section className="card panel">
       <div className="panel-header">
-        <span className="panel-title">History</span>
+        <div>
+          <span className="panel-title">History</span>
+          <p className="panel-description">
+            {saveHistory
+              ? "Saved locally on this browser."
+              : "History saving is disabled. Existing items remain until cleared."}
+          </p>
+        </div>
 
-        <button className="button button-danger" type="button" onClick={onClear}>
+        <button
+          className="button button-small button-danger panel-header-action"
+          type="button"
+          onClick={onClear}
+        >
           Clear history
         </button>
       </div>

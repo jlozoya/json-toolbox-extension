@@ -1,4 +1,11 @@
 const openJsonToolboxMenuId = "open-json-toolbox"
+const editorPayloadPrefix = "jsonToolboxEditorPayload:"
+
+type EditorPayloadItem = {
+  id: string
+  text: string
+  createdAt: string
+}
 
 function createContextMenus() {
   chrome.contextMenus.removeAll(() => {
@@ -10,6 +17,53 @@ function createContextMenus() {
   })
 }
 
+function getSessionStorageArea(): chrome.storage.StorageArea | null {
+  return chrome.storage?.session ?? chrome.storage?.local ?? null
+}
+
+async function createEditorPayload(text: string): Promise<string | null> {
+  const storageArea = getSessionStorageArea()
+
+  if (!storageArea || !text) {
+    return null
+  }
+
+  const id = crypto.randomUUID()
+  const payload: EditorPayloadItem = {
+    id,
+    text,
+    createdAt: new Date().toISOString(),
+  }
+
+  await storageArea.set({
+    [`${editorPayloadPrefix}${id}`]: payload,
+  })
+
+  return id
+}
+
+async function openEditor(text?: string) {
+  const editorUrl = chrome.runtime.getURL("editor.html")
+
+  if (!text) {
+    await chrome.tabs.create({ url: editorUrl })
+    return
+  }
+
+  const payloadId = await createEditorPayload(text)
+
+  if (payloadId) {
+    await chrome.tabs.create({
+      url: `${editorUrl}?payloadId=${encodeURIComponent(payloadId)}`,
+    })
+    return
+  }
+
+  await chrome.tabs.create({
+    url: `${editorUrl}?text=${encodeURIComponent(text)}`,
+  })
+}
+
 chrome.runtime.onInstalled.addListener(() => {
   createContextMenus()
 })
@@ -18,27 +72,17 @@ chrome.runtime.onStartup.addListener(() => {
   createContextMenus()
 })
 
-chrome.contextMenus.onClicked.addListener(async (info) => {
+chrome.contextMenus.onClicked.addListener((info) => {
   if (info.menuItemId !== openJsonToolboxMenuId) {
     return
   }
 
-  const editorUrl = chrome.runtime.getURL("editor.html")
-
-  await chrome.tabs.create({
-    url: info.selectionText
-      ? `${editorUrl}?text=${encodeURIComponent(info.selectionText)}`
-      : editorUrl,
-  })
+  void openEditor(info.selectionText)
 })
 
 chrome.runtime.onMessage.addListener((message) => {
   if (message?.type === "open-editor" && typeof message.json === "string") {
-    const editorUrl = chrome.runtime.getURL("editor.html")
-
-    void chrome.tabs.create({
-      url: `${editorUrl}?text=${encodeURIComponent(message.json)}`,
-    })
+    void openEditor(message.json)
   }
 })
 
